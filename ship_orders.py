@@ -380,19 +380,10 @@ def run_full_workflow(days=7):
         # Wait a moment for Shiprocket to process
         time.sleep(2)
         
-        # Step 3: Get Ready To Ship orders and download labels
+        # Step 3: Download labels ONLY for the shipments we just shipped
         print("📄 Downloading labels...")
-        rts_orders = get_orders(token, status="ready_to_ship", days=days)
-        
-        rts_shipment_ids = []
-        for order in rts_orders:
-            shipments = order.get("shipments", {})
-            if isinstance(shipments, dict):
-                rts_shipment_ids.append(shipments.get("id"))
-            elif isinstance(shipments, list) and shipments:
-                rts_shipment_ids.append(shipments[0].get("id"))
-        
-        rts_shipment_ids = [sid for sid in rts_shipment_ids if sid]
+        # Use only the shipment IDs we successfully shipped
+        rts_shipment_ids = shipped_ids
         
         if rts_shipment_ids:
             label_url = get_label_url(token, rts_shipment_ids)
