@@ -16,9 +16,9 @@ import streamlit as st
 
 def get_credentials():
     """Get Shiprocket credentials from secrets or env."""
+    # Try Streamlit secrets first (when running in Streamlit)
     try:
-        # Try Streamlit secrets first
-        if hasattr(st, 'secrets') and 'shiprocket' in st.secrets:
+        if hasattr(st, 'secrets') and hasattr(st.secrets, '__getitem__') and 'shiprocket' in st.secrets:
             email = st.secrets['shiprocket'].get('email')
             password = st.secrets['shiprocket'].get('password')
             api_key = st.secrets['shiprocket'].get('api_key')
@@ -27,23 +27,30 @@ def get_credentials():
                 return {'api_key': api_key}
             elif email and password:
                 return {'email': email, 'password': password}
-        
-        # Fallback to environment
-        from dotenv import load_dotenv
-        load_dotenv()
-        
-        api_key = os.getenv('SHIPROCKET_API_KEY')
-        if api_key:
-            return {'api_key': api_key}
-        
-        email = os.getenv('SHIPROCKET_EMAIL')
-        password = os.getenv('SHIPROCKET_PASSWORD')
-        if email and password:
-            return {'email': email, 'password': password}
-        
-        return None
     except:
-        return None
+        pass  # Streamlit not available or secrets not configured
+    
+    # Fallback to environment variables
+    from dotenv import load_dotenv
+    from pathlib import Path
+    
+    # Try to load from credentials file
+    creds_path = Path("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env")
+    if creds_path.exists():
+        load_dotenv(creds_path)
+    else:
+        load_dotenv()  # Load from .env in current directory
+    
+    api_key = os.getenv('SHIPROCKET_API_KEY')
+    if api_key:
+        return {'api_key': api_key}
+    
+    email = os.getenv('SHIPROCKET_EMAIL')
+    password = os.getenv('SHIPROCKET_PASSWORD')
+    if email and password:
+        return {'email': email, 'password': password}
+    
+    return None
 
 
 def authenticate():
