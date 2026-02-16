@@ -490,15 +490,21 @@ def run_full_workflow(days=7):
 
 
 def upload_to_github(result):
-    """Create ZIP of sorted labels and push to GitHub."""
+    """Create ZIP of sorted labels, save to history, and push to GitHub."""
     import zipfile
     import subprocess
     
     timestamp = datetime.now()
     date_str = timestamp.strftime('%Y-%m-%d_%H%M%S')
+    date_only = timestamp.strftime('%Y-%m-%d')
+    time_only = timestamp.strftime('%I:%M %p')
     
-    # Create ZIP with all sorted labels
-    zip_path = DATA_DIR / f"labels_{date_str}.zip"
+    PUBLIC_DIR = Path(__file__).parent / "public"
+    PUBLIC_DIR.mkdir(exist_ok=True)
+    
+    # Create ZIP with all sorted labels (in public folder for download)
+    zip_filename = f"batch_{date_str}.zip"
+    zip_path = PUBLIC_DIR / zip_filename
     
     with zipfile.ZipFile(zip_path, 'w') as zf:
         # Add all sorted label files
@@ -506,33 +512,67 @@ def upload_to_github(result):
         for sku, couriers in labels_sorted.items():
             for courier, info in couriers.items():
                 filepath = info.get("path")
-                if filepath and os.path.exists(filepath):
-                    zf.write(filepath, arcname=os.path.basename(filepath))
+                # filepath is just filename now, need to find actual file
+                if filepath:
+                    # Search in labels directories
+                    for labels_dir in LABELS_DIR.glob("2026-*/"):
+                        full_path = labels_dir / filepath
+                        if full_path.exists():
+                            zf.write(full_path, arcname=filepath)
+                            break
         
         # Add manifest if available
         manifest_path = result.get("manifest_path")
         if manifest_path and os.path.exists(manifest_path):
-            zf.write(manifest_path, arcname=os.path.basename(manifest_path))
+            manifest_filename = os.path.basename(manifest_path)
+            zf.write(manifest_path, arcname=manifest_filename)
     
-    # Create metadata JSON
-    metadata = {
+    # Create batch record
+    batch_record = {
+        "timestamp": timestamp.isoformat(),
+        "date": date_only,
+        "time": time_only,
+        "display_time": time_only,
+        "total_orders": result.get("total_orders", 0),
+        "shipped": result.get("shipped", 0),
+        "unshipped": result.get("unshipped", 0),
+        "labels_sorted": result.get("labels_sorted", {}),
+        "zip_filename": zip_filename,
+        "manifest_filename": os.path.basename(manifest_path) if manifest_path and os.path.exists(manifest_path) else None
+    }
+    
+    # Update latest_labels.json (for backwards compatibility)
+    latest_metadata = {
         "timestamp": timestamp.isoformat(),
         "date_display": timestamp.strftime('%d %b %Y, %I:%M %p'),
         "total_orders": result.get("total_orders", 0),
         "shipped": result.get("shipped", 0),
         "unshipped": result.get("unshipped", 0),
         "labels_sorted": result.get("labels_sorted", {}),
-        "zip_filename": f"labels_{date_str}.zip"
+        "zip_filename": zip_filename
     }
     
-    metadata_path = DATA_DIR / "latest_labels.json"
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
+    latest_path = PUBLIC_DIR / "latest_labels.json"
+    with open(latest_path, 'w') as f:
+        json.dump(latest_metadata, f, indent=2)
+    
+    # Append to batches history
+    history_path = PUBLIC_DIR / "batches_history.json"
+    history = {"batches": []}
+    if history_path.exists():
+        with open(history_path, 'r') as f:
+            history = json.load(f)
+    
+    history["batches"].insert(0, batch_record)  # Add to beginning
+    history["batches"] = history["batches"][:100]  # Keep last 100 batches
+    
+    with open(history_path, 'w') as f:
+        json.dump(history, f, indent=2)
     
     # Git commit and push
     repo_path = Path(__file__).parent
-    subprocess.run(["git", "add", str(zip_path), str(metadata_path)], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", f"📦 Labels update - {date_str}"], cwd=repo_path, check=True)
+    subprocess.run(["git", "add", str(PUBLIC_DIR)], cwd=repo_path, check=True)
+    subprocess.run(["git", "commit", "-m", f"📦 Batch {date_str} - {result.get('shipped', 0)} orders"], cwd=repo_path, check=True)
     subprocess.run(["git", "push", "origin", "main"], cwd=repo_path, check=True)
 
 

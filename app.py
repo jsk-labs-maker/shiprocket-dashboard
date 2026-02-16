@@ -242,3 +242,93 @@ st.markdown("""
 if st.button("🔄 Refresh", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
+
+# ===== HISTORY SECTION =====
+st.markdown("---")
+st.markdown("<h2 style='text-align: center;'>📋 Processing History</h2>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Fetch history
+@st.cache_data(ttl=60)
+def fetch_batches_history():
+    """Fetch batches history from GitHub."""
+    try:
+        url = f"{GITHUB_RAW_BASE}/batches_history.json"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("batches", [])
+        return []
+    except:
+        return []
+
+batches = fetch_batches_history()
+
+if not batches:
+    st.info("No batch history yet. History will appear after running 'Ship them buddy'")
+else:
+    # Group batches by date
+    from collections import defaultdict
+    batches_by_date = defaultdict(list)
+    for batch in batches:
+        date = batch.get("date", "Unknown")
+        batches_by_date[date].append(batch)
+    
+    # Show today's batches expanded, others collapsed
+    from datetime import datetime as dt
+    today = dt.now().strftime('%Y-%m-%d')
+    
+    for date in sorted(batches_by_date.keys(), reverse=True):
+        date_batches = batches_by_date[date]
+        is_today = (date == today)
+        
+        # Date header
+        try:
+            date_obj = dt.strptime(date, '%Y-%m-%d')
+            date_display = date_obj.strftime('%d %b %Y')
+            if is_today:
+                date_display += " (Today)"
+        except:
+            date_display = date
+        
+        # Summary
+        total_shipped = sum(b.get("shipped", 0) for b in date_batches)
+        total_unshipped = sum(b.get("unshipped", 0) for b in date_batches)
+        
+        with st.expander(f"📅 **{date_display}** — {len(date_batches)} batches | {total_shipped} shipped", expanded=is_today):
+            for batch in date_batches:
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+                    
+                    with col1:
+                        st.markdown(f"**⏰ {batch.get('time', 'Unknown')}**")
+                    
+                    with col2:
+                        shipped = batch.get("shipped", 0)
+                        unshipped = batch.get("unshipped", 0)
+                        st.markdown(f"✅ {shipped} shipped  ❌ {unshipped} failed")
+                    
+                    with col3:
+                        labels_sorted = batch.get("labels_sorted", {})
+                        sku_count = len(labels_sorted)
+                        st.markdown(f"📦 {sku_count} SKUs")
+                    
+                    with col4:
+                        # Download buttons
+                        zip_file = batch.get("zip_filename")
+                        if zip_file:
+                            zip_url = f"{GITHUB_RAW_BASE}/{zip_file}"
+                            try:
+                                response = requests.get(zip_url, timeout=10)
+                                if response.status_code == 200:
+                                    st.download_button(
+                                        label="📥 ZIP",
+                                        data=response.content,
+                                        file_name=zip_file,
+                                        mime="application/zip",
+                                        key=f"zip_{batch.get('timestamp')}",
+                                        use_container_width=True
+                                    )
+                            except:
+                                st.caption("❌ ZIP unavailable")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
