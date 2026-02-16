@@ -1,6 +1,6 @@
 {
-  "status": "complete",
-  "message": "\u2705 Done! 3 orders shipped",
-  "timestamp": "2026-02-16T20:52:40.884846",
-  "progress": 100
+  "status": "processing",
+  "message": "Starting workflow...",
+  "timestamp": "2026-02-16T20:54:19.783814",
+  "progress": 10
 }
