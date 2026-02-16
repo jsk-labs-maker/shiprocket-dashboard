@@ -150,9 +150,9 @@ def sort_labels_by_sku_courier(input_pdf_path, output_dir):
                     courier = name
                     break
             
-            # Extract SKU
+            # Extract SKU - look for "SKU: XXXXX" pattern
             sku = 'Unknown'
-            sku_match = re.search(r'SKU[:\s]*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
+            sku_match = re.search(r'SKU:\s*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
             if sku_match:
                 sku = sku_match.group(1).strip()
                 # Clean up SKU for filename
