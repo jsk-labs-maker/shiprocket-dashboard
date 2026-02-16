@@ -119,67 +119,93 @@ def download_file(url, filepath):
     return False
 
 
+def normalize_sku(sku_raw: str) -> str:
+    """Normalize SKU for filename safety."""
+    return re.sub(r'[^\w\-]', '', sku_raw.replace(' ', '-'))[:50]
+
+
+def extract_label_info(page_text: str) -> dict:
+    """Extract courier, SKU, and date from label text."""
+    info = {
+        'courier': 'Unknown',
+        'sku': 'Unknown',
+        'date': datetime.now().strftime('%Y-%m-%d')
+    }
+    
+    # Courier patterns
+    courier_patterns = [
+        (r'Ekart[^\n]*', 'Ekart'),
+        (r'Delhivery[^\n]*', 'Delhivery'),
+        (r'Xpressbees[^\n]*', 'Xpressbees'),
+        (r'BlueDart[^\n]*', 'BlueDart'),
+        (r'DTDC[^\n]*', 'DTDC'),
+        (r'Shadowfax[^\n]*', 'Shadowfax'),
+        (r'Ecom\s*Express[^\n]*', 'EcomExpress'),
+    ]
+    
+    for pattern, name in courier_patterns:
+        match = re.search(pattern, page_text, re.IGNORECASE)
+        if match:
+            info['courier'] = name
+            break
+    
+    # SKU extraction - look for "SKU: XXXXX"
+    sku_match = re.search(r'SKU:\s*([^\n]+)', page_text)
+    if sku_match:
+        info['sku'] = normalize_sku(sku_match.group(1).strip())
+    
+    # Date extraction
+    date_match = re.search(r'Invoice Date:\s*(\d{4}-\d{2}-\d{2})', page_text)
+    if date_match:
+        info['date'] = date_match.group(1)
+    else:
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', page_text)
+        if date_match:
+            info['date'] = date_match.group(1)
+    
+    return info
+
+
 def sort_labels_by_sku_courier(input_pdf_path, output_dir):
-    """Sort labels PDF by SKU + Courier. Returns nested dict of sku -> courier -> filepath."""
+    """Sort labels PDF by Date + Courier + SKU. Returns nested dict."""
     try:
         from pypdf import PdfReader, PdfWriter
-        import re
         from collections import defaultdict
         
         reader = PdfReader(input_pdf_path)
-        # Nested dict: sku_courier_pages[(sku, courier)] = [page_indices]
-        sku_courier_pages = defaultdict(list)
+        total_pages = len(reader.pages)
         
-        courier_patterns = [
-            (r'Ekart', 'Ekart'),
-            (r'Delhivery', 'Delhivery'),
-            (r'Xpressbees', 'Xpressbees'),
-            (r'BlueDart', 'BlueDart'),
-            (r'DTDC', 'DTDC'),
-            (r'Shadowfax', 'Shadowfax'),
-            (r'Ecom\s*Express', 'EcomExpress'),
-        ]
+        # Group pages by (date, courier, sku)
+        groups = defaultdict(list)
         
         for i, page in enumerate(reader.pages):
             text = page.extract_text() or ''
-            
-            # Extract courier
-            courier = 'Unknown'
-            for pattern, name in courier_patterns:
-                if re.search(pattern, text, re.IGNORECASE):
-                    courier = name
-                    break
-            
-            # Extract SKU - look for "SKU: XXXXX" pattern
-            sku = 'Unknown'
-            sku_match = re.search(r'SKU:\s*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
-            if sku_match:
-                sku = sku_match.group(1).strip()
-                # Clean up SKU for filename
-                sku = re.sub(r'[^\w\-]', '', sku)[:30]
-            
-            sku_courier_pages[(sku, courier)].append(i)
+            info = extract_label_info(text)
+            key = (info['date'], info['courier'], info['sku'])
+            groups[key].append(i)
         
-        # Create sorted PDFs
-        sorted_files = {}  # {sku: {courier: {path, count}}}
-        date_str = datetime.now().strftime('%Y-%m-%d_%H%M')
+        # Create sorted PDFs - return in {sku: {courier: {path, count}}} format
+        sorted_files = {}
         
-        for (sku, courier), page_indices in sku_courier_pages.items():
+        for (date, courier, sku), page_indices in sorted(groups.items()):
             if page_indices:
+                # Output filename: YYYY-MM-DD_Courier_SKU.pdf
+                filename = f"{date}_{courier}_{sku}.pdf"
+                filepath = output_dir / filename
+                
                 writer = PdfWriter()
                 for idx in page_indices:
                     writer.add_page(reader.pages[idx])
                 
-                filename = f"{date_str}_{sku}_{courier}.pdf"
-                filepath = output_dir / filename
                 with open(filepath, 'wb') as f:
                     writer.write(f)
                 
+                # Organize by SKU -> Courier
                 if sku not in sorted_files:
                     sorted_files[sku] = {}
                 
                 sorted_files[sku][courier] = {
-                    'path': str(filepath),
+                    'path': filename,  # Just filename, not full path
                     'count': len(page_indices)
                 }
         
