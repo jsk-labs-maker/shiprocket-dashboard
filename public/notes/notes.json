@@ -1,4 +1,17 @@
 {
-  "notes": [],
-  "updated_at": null
+  "notes": [
+    {
+      "id": "note-001",
+      "type": "ai",
+      "content": "Dashboard v2.0 is now live with all 10 sections. Ship Now button triggers the full workflow: fetch orders → ship → download labels → schedule pickup → generate manifest.",
+      "timestamp": "2026-02-16 23:20:00"
+    },
+    {
+      "id": "note-002",
+      "type": "user",
+      "content": "Remember to check wallet balance before high-volume shipping days.",
+      "timestamp": "2026-02-16 22:00:00"
+    }
+  ],
+  "updated_at": "2026-02-16T23:20:00"
 }

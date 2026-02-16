@@ -1,4 +1,19 @@
 {
-  "logs": [],
-  "updated_at": null
+  "logs": [
+    {
+      "id": "log-001",
+      "timestamp": "2026-02-16 23:20:00",
+      "action": "Dashboard Updated",
+      "message": "Premium Admin Dashboard v2.0 deployed with 10 sections",
+      "type": "success"
+    },
+    {
+      "id": "log-002",
+      "timestamp": "2026-02-16 22:30:00",
+      "action": "API Check",
+      "message": "Shiprocket API connection verified - 156ms response time",
+      "type": "info"
+    }
+  ],
+  "updated_at": "2026-02-16T23:20:00"
 }

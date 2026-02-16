@@ -1,4 +1,32 @@
 {
-  "schedules": [],
-  "updated_at": null
+  "schedules": [
+    {
+      "id": "sched-001",
+      "name": "Morning Batch",
+      "time": "09:00",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      "action": "Ship All Orders",
+      "enabled": true,
+      "last_run": "2026-02-16T09:00:00"
+    },
+    {
+      "id": "sched-002",
+      "name": "Afternoon Batch",
+      "time": "14:00",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "action": "Ship All Orders",
+      "enabled": true,
+      "last_run": "2026-02-16T14:00:00"
+    },
+    {
+      "id": "sched-003",
+      "name": "Evening Batch",
+      "time": "18:00",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "action": "Ship All Orders",
+      "enabled": true,
+      "last_run": "2026-02-16T18:00:00"
+    }
+  ],
+  "updated_at": "2026-02-16T23:20:00"
 }
