@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-02-16T19:42:53.162517",
+  "date_display": "16 Feb 2026, 07:42 PM",
+  "total_orders": 10,
+  "shipped": 10,
+  "unshipped": 0,
+  "labels_sorted": {
+    "IU4A1771250": {
+      "Delhivery": {
+        "path": "2026-02-16_1933_IU4A1771250_Delhivery.pdf",
+        "count": 1
+      }
+    },
+    "MDSE1771247": {
+      "Delhivery": {
+        "path": "2026-02-16_1933_MDSE1771247_Delhivery.pdf",
+        "count": 5
+      }
+    },
+    "IRUN1771242": {
+      "Delhivery": {
+        "path": "2026-02-16_1933_IRUN1771242_Delhivery.pdf",
+        "count": 1
+      }
+    },
+    "15J71771250": {
+      "Delhivery": {
+        "path": "2026-02-16_1933_15J71771250_Delhivery.pdf",
+        "count": 1
+      }
+    },
+    "GX181771250": {
+      "Delhivery": {
+        "path": "2026-02-16_1933_GX181771250_Delhivery.pdf",
+        "count": 1
+      }
+    },
+    "J6QE1771244": {
+      "Ekart": {
+        "path": "2026-02-16_1933_J6QE1771244_Ekart.pdf",
+        "count": 1
+      }
+    }
+  },
+  "zip_filename": "labels_latest.zip"
+}

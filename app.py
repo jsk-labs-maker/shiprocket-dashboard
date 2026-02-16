@@ -24,7 +24,7 @@ st.set_page_config(
 # Configuration
 GITHUB_REPO = "jsk-labs-maker/shiprocket-dashboard"
 GITHUB_BRANCH = "main"
-GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}"
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/public"
 
 # --- Helper Functions ---
 
@@ -32,7 +32,7 @@ GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRAN
 def fetch_latest_labels():
     """Fetch latest labels metadata from GitHub."""
     try:
-        url = f"{GITHUB_RAW_BASE}/data/latest_labels.json"
+        url = f"{GITHUB_RAW_BASE}/latest_labels.json"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
@@ -43,7 +43,7 @@ def fetch_latest_labels():
 
 def get_zip_download_url(zip_filename):
     """Get GitHub raw URL for ZIP file."""
-    return f"{GITHUB_RAW_BASE}/data/{zip_filename}"
+    return f"{GITHUB_RAW_BASE}/{zip_filename}"
 
 
 def get_courier_emoji(courier):
