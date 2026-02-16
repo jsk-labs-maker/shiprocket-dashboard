@@ -31,18 +31,35 @@ SHIPROCKET_API_BASE = "https://apiv2.shiprocket.in/v1/external"
 def shiprocket_authenticate():
     """Authenticate with Shiprocket API."""
     try:
-        # Try to get from Streamlit secrets first
+        # Try to get API key from Streamlit secrets first
         if hasattr(st, 'secrets') and 'shiprocket' in st.secrets:
-            email = st.secrets['shiprocket']['email']
-            password = st.secrets['shiprocket']['password']
+            api_key = st.secrets['shiprocket'].get('api_key')
+            
+            # If API key provided, use it directly (no login needed)
+            if api_key:
+                return api_key
+            
+            # Fallback to email/password authentication
+            email = st.secrets['shiprocket'].get('email')
+            password = st.secrets['shiprocket'].get('password')
         else:
             # Fallback to env file for local testing
             from dotenv import load_dotenv
             import os
             load_dotenv()
+            api_key = os.getenv('SHIPROCKET_API_KEY')
+            
+            if api_key:
+                return api_key
+            
             email = os.getenv('SHIPROCKET_EMAIL')
             password = os.getenv('SHIPROCKET_PASSWORD')
         
+        # If API key found, return it
+        if api_key:
+            return api_key
+        
+        # Otherwise, authenticate with email/password
         if not email or not password:
             return None
         
