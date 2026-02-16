@@ -401,10 +401,10 @@ def run_full_workflow(days=7):
                     total_files = sum(len(couriers) for couriers in result["labels_sorted"].values())
                     print(f"   Sorted into {total_files} files ({len(result['labels_sorted'])} SKUs)")
         
-        # Step 4: Schedule pickup
+        # Step 4: Schedule pickup (only for orders we just shipped)
         print("🚚 Scheduling pickup...")
         try:
-            pickup_result = schedule_pickup(token, rts_shipment_ids)
+            pickup_result = schedule_pickup(token, shipped_ids)
             scheduled = pickup_result.get("scheduled", 0)
             total = pickup_result.get("total", 0)
             result["pickup_scheduled"] = scheduled > 0
@@ -413,10 +413,10 @@ def run_full_workflow(days=7):
         except Exception as e:
             result["errors"].append(f"Pickup scheduling failed: {str(e)}")
         
-        # Step 5: Generate manifest
+        # Step 5: Generate manifest (only for orders we just shipped)
         print("📋 Generating manifest...")
         try:
-            manifest_result = generate_manifest(token, rts_shipment_ids)
+            manifest_result = generate_manifest(token, shipped_ids)
             manifest_url = manifest_result.get("manifest_url", "")
             result["manifest_url"] = manifest_url
             
