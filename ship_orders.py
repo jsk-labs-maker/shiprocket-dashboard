@@ -289,31 +289,85 @@ def save_history(record):
         json.dump(history, f, indent=2)
 
 
-def update_status(status, message="", progress=0):
-    """Update processing status for dashboard."""
+def add_activity_log(result):
+    """Add entry to activity log."""
+    try:
+        import uuid
+        
+        PUBLIC_DIR = Path(__file__).parent / "public" / "logs"
+        PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+        log_file = PUBLIC_DIR / "activity.json"
+        
+        logs = {"logs": [], "updated_at": None}
+        if log_file.exists():
+            with open(log_file, 'r') as f:
+                logs = json.load(f)
+        
+        shipped = result.get("shipped", 0)
+        failed = result.get("unshipped", 0)
+        log_type = "success" if failed == 0 else ("warning" if shipped > 0 else "error")
+        
+        log_entry = {
+            "id": f"log-{uuid.uuid4().hex[:8]}",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "action": "Shipping Workflow",
+            "message": f"Shipped: {shipped}, Failed: {failed}, Total: {result.get('total_orders', 0)}",
+            "type": log_type
+        }
+        
+        logs["logs"].insert(0, log_entry)
+        logs["logs"] = logs["logs"][:500]  # Keep last 500 logs
+        logs["updated_at"] = datetime.now().isoformat()
+        
+        with open(log_file, 'w') as f:
+            json.dump(logs, f, indent=2)
+    except:
+        pass  # Don't fail workflow if logging fails
+
+
+def update_status(status, message="", progress=0, push_to_github=False):
+    """Update processing status for dashboard.
+    
+    Args:
+        status: Status type (idle, processing, complete, error)
+        message: Status message
+        progress: Progress percentage 0-100
+        push_to_github: If True, commit and push to GitHub (slower but real-time)
+    """
     try:
         PUBLIC_DIR = Path(__file__).parent / "public"
         PUBLIC_DIR.mkdir(exist_ok=True)
         status_file = PUBLIC_DIR / "status.json"
+        ai_status_file = PUBLIC_DIR / "ai" / "status.json"
+        
+        # Create ai directory if needed
+        (PUBLIC_DIR / "ai").mkdir(exist_ok=True)
         
         status_data = {
             "status": status,  # idle, processing, complete, error
             "message": message,
+            "current_task": message if status == "processing" else None,
             "timestamp": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
             "progress": progress
         }
         
+        # Write to both status files (backward compatibility)
         with open(status_file, 'w') as f:
             json.dump(status_data, f, indent=2)
         
-        # Auto-commit and push status
-        import subprocess
-        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "add", str(status_file)], 
-                      capture_output=True, timeout=5)
-        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "commit", "-m", f"Status: {status}"], 
-                      capture_output=True, timeout=5)
-        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "push", "origin", "main"], 
-                      capture_output=True, timeout=10)
+        with open(ai_status_file, 'w') as f:
+            json.dump(status_data, f, indent=2)
+        
+        # Only push to GitHub for major status changes (start, complete, error)
+        if push_to_github or status in ["complete", "error"]:
+            import subprocess
+            subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "add", str(status_file), str(ai_status_file)], 
+                          capture_output=True, timeout=5)
+            subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "commit", "-m", f"Status: {status}"], 
+                          capture_output=True, timeout=5)
+            subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "push", "origin", "main"], 
+                          capture_output=True, timeout=10)
     except:
         pass  # Don't fail workflow if status update fails
 
@@ -329,8 +383,8 @@ def run_full_workflow(days=7):
     
     Returns summary dict.
     """
-    # Update status: Starting
-    update_status("processing", "Starting workflow...", 10)
+    # Update status: Starting (push to show we're active)
+    update_status("processing", "Starting workflow...", 10, push_to_github=True)
     
     # Ensure directories exist
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -475,8 +529,11 @@ def run_full_workflow(days=7):
     # Save to history
     save_history(result)
     
-    # Final status
-    update_status("complete", f"✅ Done! {result.get('shipped', 0)} orders shipped", 100)
+    # Add activity log entry
+    add_activity_log(result)
+    
+    # Final status (push to GitHub)
+    update_status("complete", f"✅ Done! {result.get('shipped', 0)} orders shipped", 100, push_to_github=True)
     
     # Create ZIP and push to GitHub
     try:
@@ -529,6 +586,9 @@ def upload_to_github(result):
             zf.write(manifest_path, arcname=manifest_filename)
     
     # Create batch record
+    labels_sorted = result.get("labels_sorted", {})
+    sku_list = list(labels_sorted.keys()) if labels_sorted else []
+    
     batch_record = {
         "timestamp": timestamp.isoformat(),
         "date": date_only,
@@ -537,7 +597,10 @@ def upload_to_github(result):
         "total_orders": result.get("total_orders", 0),
         "shipped": result.get("shipped", 0),
         "unshipped": result.get("unshipped", 0),
-        "labels_sorted": result.get("labels_sorted", {}),
+        "skus": sku_list,
+        "sku_count": len(sku_list),
+        "labels_sorted": labels_sorted,
+        "zip_file": f"public/{zip_filename}",
         "zip_filename": zip_filename,
         "manifest_filename": os.path.basename(manifest_path) if manifest_path and os.path.exists(manifest_path) else None
     }
