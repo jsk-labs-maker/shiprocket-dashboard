@@ -288,6 +288,35 @@ def save_history(record):
         json.dump(history, f, indent=2)
 
 
+def update_status(status, message="", progress=0):
+    """Update processing status for dashboard."""
+    try:
+        PUBLIC_DIR = Path(__file__).parent / "public"
+        PUBLIC_DIR.mkdir(exist_ok=True)
+        status_file = PUBLIC_DIR / "status.json"
+        
+        status_data = {
+            "status": status,  # idle, processing, complete, error
+            "message": message,
+            "timestamp": datetime.now().isoformat(),
+            "progress": progress
+        }
+        
+        with open(status_file, 'w') as f:
+            json.dump(status_data, f, indent=2)
+        
+        # Auto-commit and push status
+        import subprocess
+        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "add", str(status_file)], 
+                      capture_output=True, timeout=5)
+        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "commit", "-m", f"Status: {status}"], 
+                      capture_output=True, timeout=5)
+        subprocess.run(["git", "-C", str(PUBLIC_DIR.parent), "push", "origin", "main"], 
+                      capture_output=True, timeout=10)
+    except:
+        pass  # Don't fail workflow if status update fails
+
+
 def run_full_workflow(days=7):
     """
     Run the complete shipping workflow:
@@ -299,6 +328,9 @@ def run_full_workflow(days=7):
     
     Returns summary dict.
     """
+    # Update status: Starting
+    update_status("processing", "Starting workflow...", 10)
+    
     # Ensure directories exist
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LABELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -323,10 +355,12 @@ def run_full_workflow(days=7):
     
     try:
         print("🔐 Authenticating...")
+        update_status("processing", "Authenticating with Shiprocket...", 20)
         token = authenticate()
         
         # Step 1: Get NEW orders
         print("📋 Fetching NEW orders...")
+        update_status("processing", "Fetching NEW orders...", 30)
         new_orders = get_orders(token, status="new", days=days)
         result["total_orders"] = len(new_orders)
         
@@ -338,6 +372,7 @@ def run_full_workflow(days=7):
         
         # Step 2: Ship all orders
         print("🚀 Shipping orders...")
+        update_status("processing", f"Shipping {len(new_orders)} orders...", 40)
         shipped_ids = []
         
         for order in new_orders:
@@ -382,6 +417,7 @@ def run_full_workflow(days=7):
         
         # Step 3: Download labels ONLY for the shipments we just shipped
         print("📄 Downloading labels...")
+        update_status("processing", f"Downloading labels for {len(shipped_ids)} orders...", 60)
         # Use only the shipment IDs we successfully shipped
         rts_shipment_ids = shipped_ids
         
@@ -429,12 +465,17 @@ def run_full_workflow(days=7):
             result["errors"].append(f"Manifest generation failed: {str(e)}")
         
         print("✅ Workflow complete!")
+        update_status("processing", "Uploading to GitHub...", 90)
         
     except Exception as e:
         result["errors"].append(f"Workflow error: {str(e)}")
+        update_status("error", f"Error: {str(e)}", 0)
     
     # Save to history
     save_history(result)
+    
+    # Final status
+    update_status("complete", f"✅ Done! {result.get('shipped', 0)} orders shipped", 100)
     
     # Create ZIP and push to GitHub
     try:

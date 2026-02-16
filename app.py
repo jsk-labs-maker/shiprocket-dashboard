@@ -28,6 +28,19 @@ GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRAN
 
 # --- Helper Functions ---
 
+@st.cache_data(ttl=10)  # Cache for 10 seconds (faster updates)
+def fetch_processing_status():
+    """Fetch current processing status from GitHub."""
+    try:
+        url = f"{GITHUB_RAW_BASE}/status.json"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except:
+        return None
+
+
 @st.cache_data(ttl=60)  # Cache for 1 minute
 def fetch_latest_labels():
     """Fetch latest labels metadata from GitHub."""
@@ -84,6 +97,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("---")
+
+# Live processing status banner
+status_data = fetch_processing_status()
+if status_data and status_data.get("status") == "processing":
+    st.info(f"🔄 **{status_data.get('message', 'Processing orders...')}**")
+    progress = status_data.get("progress", 0)
+    if progress > 0:
+        st.progress(progress / 100)
+    st.caption("Please wait... Dashboard will auto-update when complete.")
+    st.markdown("---")
+elif status_data and status_data.get("status") == "complete":
+    st.success(f"✅ **{status_data.get('message', 'Processing complete!')}**")
+    st.caption("Showing latest batch below")
+    st.markdown("---")
 
 # Ship Now button (admin feature)
 col1, col2, col3 = st.columns([1, 2, 1])
