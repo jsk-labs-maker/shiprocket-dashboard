@@ -85,6 +85,20 @@ st.markdown("""
 
 st.markdown("---")
 
+# Ship Now button (admin feature)
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("🚀 Ship Now", type="primary", use_container_width=True):
+        # Trigger via webhook or show Telegram command
+        st.warning("⚠️ Make sure you have NEW orders in Shiprocket!")
+        
+        # For now, show telegram command (will implement webhook later)
+        st.info("💬 Send this message to Kluzo on Telegram:")
+        st.code("Ship them buddy", language=None)
+        st.caption("Dashboard will auto-update after processing (~2-3 minutes)")
+
+st.markdown("---")
+
 # Fetch labels
 with st.spinner("Loading labels..."):
     labels_data = fetch_latest_labels()
