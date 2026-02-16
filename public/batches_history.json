@@ -1,3 +1,16 @@
 {
-  "batches": []
+  "batches": [
+    {
+      "timestamp": "2026-02-16T20:52:42.381932",
+      "date": "2026-02-16",
+      "time": "08:52 PM",
+      "display_time": "08:52 PM",
+      "total_orders": 10,
+      "shipped": 3,
+      "unshipped": 7,
+      "labels_sorted": {},
+      "zip_filename": "batch_2026-02-16_205242.zip",
+      "manifest_filename": "2026-02-16_205211_manifest.pdf"
+    }
+  ]
 }
