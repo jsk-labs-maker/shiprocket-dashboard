@@ -83,16 +83,21 @@ def get_label_url(token, shipment_ids):
 
 
 def schedule_pickup(token, shipment_ids):
-    """Schedule pickup for shipments."""
+    """Schedule pickup for shipments (one by one for reliability)."""
     url = f"{BASE_URL}/courier/generate/pickup"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
-    # Just pass shipment_ids, no pickup_date needed
-    response = requests.post(url, headers=headers, json={
-        "shipment_id": shipment_ids
-    })
-    response.raise_for_status()
-    return response.json()
+    success_count = 0
+    for sid in shipment_ids:
+        try:
+            response = requests.post(url, headers=headers, json={"shipment_id": [sid]})
+            if response.status_code == 200:
+                success_count += 1
+            time.sleep(0.2)  # Small delay to avoid rate limiting
+        except:
+            pass
+    
+    return {"scheduled": success_count, "total": len(shipment_ids)}
 
 
 def generate_manifest(token, shipment_ids):
@@ -310,8 +315,11 @@ def run_full_workflow(days=7):
         print("🚚 Scheduling pickup...")
         try:
             pickup_result = schedule_pickup(token, rts_shipment_ids)
-            result["pickup_scheduled"] = True
-            print("   Pickup scheduled for tomorrow")
+            scheduled = pickup_result.get("scheduled", 0)
+            total = pickup_result.get("total", 0)
+            result["pickup_scheduled"] = scheduled > 0
+            result["pickup_count"] = scheduled
+            print(f"   Pickup scheduled for {scheduled}/{total} shipments")
         except Exception as e:
             result["errors"].append(f"Pickup scheduling failed: {str(e)}")
         
