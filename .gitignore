@@ -1,0 +1,12 @@
+# Environment
+.env
+*.env
+.venv/
+venv/
+__pycache__/
+
+# Data (contains labels, manifests, history)
+data/
+
+# Credentials
+*credentials*
