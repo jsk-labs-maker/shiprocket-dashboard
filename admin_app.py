@@ -213,9 +213,6 @@ with col1:
 with col2:
     st.markdown("### ⚡ Quick Actions")
     if st.button("🚀 Ship Orders Now", type="primary", use_container_width=True):
-        import subprocess
-        from pathlib import Path
-        
         st.info("🔄 Starting shipping workflow...")
         
         # Progress placeholder
@@ -223,55 +220,50 @@ with col2:
         progress_bar = st.progress(0)
         
         try:
-            # Run ship_orders.py script
-            script_path = Path(__file__).parent / "ship_orders.py"
+            from shiprocket_workflow import run_shipping_workflow
             
-            # Check if script exists
-            if not script_path.exists():
-                st.error(f"❌ Script not found: {script_path}")
+            progress_text.text("🔐 Authenticating...")
+            progress_bar.progress(20)
+            
+            progress_text.text("📋 Fetching NEW orders...")
+            progress_bar.progress(40)
+            
+            progress_text.text("🚀 Shipping orders...")
+            progress_bar.progress(60)
+            
+            # Run the workflow
+            result = run_shipping_workflow()
+            
+            progress_bar.progress(100)
+            progress_text.empty()
+            
+            # Show results
+            st.markdown("### 📊 Results")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Orders", result.get("total_orders", 0))
+            with col2:
+                st.metric("✅ Shipped", result.get("shipped", 0))
+            with col3:
+                st.metric("❌ Failed", result.get("unshipped", 0))
+            
+            if result.get("shipped", 0) > 0:
+                st.success(f"✅ Successfully shipped {result['shipped']} orders!")
+                st.info("📥 Labels will be uploaded to GitHub shortly. Check staff dashboard!")
             else:
-                progress_text.text("🔐 Authenticating...")
-                progress_bar.progress(10)
+                st.warning(f"⚠️ No orders shipped")
                 
-                # Run the script
-                result = subprocess.run(
-                    ["python3", str(script_path)],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                
-                progress_bar.progress(100)
-                
-                # Parse output
-                output = result.stdout
-                
-                if result.returncode == 0:
-                    # Extract summary from output
-                    if "Shipped:" in output:
-                        lines = output.split('\n')
-                        for line in lines:
-                            if "Shipped:" in line:
-                                st.success(f"✅ {line.strip()}")
-                            elif "Total Orders:" in line:
-                                st.info(line.strip())
-                    
-                    st.success("✅ Workflow complete! Check staff dashboard for labels.")
-                    
-                    # Show full output in expander
-                    with st.expander("📋 Full Log"):
-                        st.code(output)
-                else:
-                    st.error("❌ Workflow failed")
-                    st.code(output)
-                    if result.stderr:
-                        st.error("Error details:")
-                        st.code(result.stderr)
-                
-        except subprocess.TimeoutExpired:
-            st.error("❌ Workflow timed out (>5 minutes)")
+                if result.get("errors"):
+                    with st.expander("❌ Error Details"):
+                        for error in result["errors"]:
+                            st.error(error)
+            
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
+            import traceback
+            with st.expander("Debug Info"):
+                st.code(traceback.format_exc())
         finally:
             progress_text.empty()
             progress_bar.empty()
