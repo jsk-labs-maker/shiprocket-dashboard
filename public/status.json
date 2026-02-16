@@ -1,6 +1,6 @@
 {
   "status": "processing",
-  "message": "Shipping 10 orders...",
-  "timestamp": "2026-02-16T20:52:17.778829",
-  "progress": 40
+  "message": "Downloading labels for 3 orders...",
+  "timestamp": "2026-02-16T20:52:32.254015",
+  "progress": 60
 }
