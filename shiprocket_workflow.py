@@ -131,6 +131,57 @@ def ship_order(token, shipment_id):
         return False, response.text
 
 
+def download_labels(token, shipment_ids):
+    """Download labels for shipments."""
+    BASE_URL = "https://apiv2.shiprocket.in/v1/external"
+    url = f"{BASE_URL}/courier/generate/label"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    
+    response = requests.post(url, headers=headers, json={"shipment_id": shipment_ids})
+    response.raise_for_status()
+    
+    label_url = response.json().get("label_url", "")
+    if label_url:
+        label_response = requests.get(label_url)
+        return label_response.content
+    return None
+
+
+def schedule_pickup(token, shipment_ids):
+    """Schedule pickup for shipments (one by one)."""
+    BASE_URL = "https://apiv2.shiprocket.in/v1/external"
+    url = f"{BASE_URL}/courier/generate/pickup"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    
+    success_count = 0
+    for sid in shipment_ids:
+        try:
+            response = requests.post(url, headers=headers, json={"shipment_id": [sid]})
+            if response.status_code == 200:
+                success_count += 1
+            time.sleep(0.2)  # Avoid rate limiting
+        except:
+            pass
+    
+    return success_count
+
+
+def generate_manifest(token, shipment_ids):
+    """Generate manifest."""
+    BASE_URL = "https://apiv2.shiprocket.in/v1/external"
+    url = f"{BASE_URL}/manifests/generate"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    
+    response = requests.post(url, headers=headers, json={"shipment_id": shipment_ids})
+    
+    if response.status_code == 200:
+        manifest_url = response.json().get("manifest_url", "")
+        if manifest_url:
+            manifest_response = requests.get(manifest_url)
+            return manifest_response.content
+    return None
+
+
 def run_shipping_workflow():
     """
     Run complete shipping workflow (Streamlit-compatible).
@@ -141,15 +192,20 @@ def run_shipping_workflow():
         "shipped": 0,
         "failed": 0,
         "skipped": 0,
+        "pickup_scheduled": 0,
+        "labels_downloaded": False,
+        "manifest_generated": False,
         "errors": [],
         "details": []
     }
     
     try:
         # Authenticate
+        result["details"].append("🔐 Authenticating...")
         token = authenticate()
         
         # Get NEW orders
+        result["details"].append("📋 Fetching NEW orders...")
         orders = get_new_orders(token)
         result["total_orders"] = len(orders)
         
@@ -157,7 +213,12 @@ def run_shipping_workflow():
             result["errors"].append("No NEW orders found (all orders are either shipped, canceled, or not ready)")
             return result
         
+        result["details"].append(f"Found {len(orders)} NEW orders")
+        
         # Ship each order
+        result["details"].append("🚀 Shipping orders...")
+        shipped_ids = []
+        
         for order in orders:
             order_id = order.get("id")
             
@@ -165,13 +226,13 @@ def run_shipping_workflow():
             shipments = order.get("shipments", [])
             if not shipments:
                 result["skipped"] += 1
-                result["details"].append(f"Order #{order_id}: No shipment created yet")
+                result["details"].append(f"  Order #{order_id}: ⏭️ Skipped (no shipment)")
                 continue
             
             shipment_id = shipments[0].get("id")
             if not shipment_id:
                 result["skipped"] += 1
-                result["details"].append(f"Order #{order_id}: No shipment ID")
+                result["details"].append(f"  Order #{order_id}: ⏭️ Skipped (no shipment ID)")
                 continue
             
             # Try to ship
@@ -179,16 +240,54 @@ def run_shipping_workflow():
             
             if success:
                 result["shipped"] += 1
-                awb = response.get("response", {}).get("data", {}).get("awb_assign_status", "Unknown")
-                result["details"].append(f"Order #{order_id}: ✅ Shipped (AWB assigned)")
+                shipped_ids.append(shipment_id)
+                result["details"].append(f"  Order #{order_id}: ✅ Shipped")
             else:
                 result["failed"] += 1
-                error_msg = str(response)[:100]  # Limit error message length
-                result["details"].append(f"Order #{order_id}: ❌ Failed - {error_msg}")
+                error_msg = str(response)[:80]
+                result["details"].append(f"  Order #{order_id}: ❌ Failed - {error_msg}")
         
-        # Summary message
-        if result["shipped"] == 0 and result["total_orders"] > 0:
+        # If nothing shipped, stop here
+        if not shipped_ids:
             result["errors"].append(f"Found {result['total_orders']} NEW orders but could not ship any")
+            return result
+        
+        result["details"].append(f"✅ Shipped {len(shipped_ids)} orders")
+        
+        # Download labels
+        result["details"].append("📄 Downloading labels...")
+        try:
+            labels_pdf = download_labels(token, shipped_ids)
+            if labels_pdf:
+                result["labels_downloaded"] = True
+                result["details"].append("  ✅ Labels downloaded")
+            else:
+                result["details"].append("  ⚠️ Labels download failed")
+        except Exception as e:
+            result["details"].append(f"  ❌ Labels error: {str(e)[:50]}")
+        
+        # Schedule pickup (one by one)
+        result["details"].append("🚚 Scheduling pickup...")
+        try:
+            pickup_count = schedule_pickup(token, shipped_ids)
+            result["pickup_scheduled"] = pickup_count
+            result["details"].append(f"  ✅ Pickup scheduled for {pickup_count}/{len(shipped_ids)} shipments")
+        except Exception as e:
+            result["details"].append(f"  ❌ Pickup error: {str(e)[:50]}")
+        
+        # Generate manifest
+        result["details"].append("📋 Generating manifest...")
+        try:
+            manifest_pdf = generate_manifest(token, shipped_ids)
+            if manifest_pdf:
+                result["manifest_generated"] = True
+                result["details"].append("  ✅ Manifest generated")
+            else:
+                result["details"].append("  ⚠️ Manifest generation failed")
+        except Exception as e:
+            result["details"].append(f"  ❌ Manifest error: {str(e)[:50]}")
+        
+        result["details"].append("✅ Workflow complete!")
         
         return result
         

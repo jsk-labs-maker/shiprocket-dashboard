@@ -250,16 +250,41 @@ with col2:
             with col4:
                 st.metric("⏭️ Skipped", result.get("skipped", 0))
             
+            # Additional status
+            st.markdown("### 📋 Workflow Status")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                pickup = result.get("pickup_scheduled", 0)
+                shipped = result.get("shipped", 0)
+                if pickup > 0:
+                    st.success(f"🚚 Pickup: {pickup}/{shipped}")
+                else:
+                    st.info("🚚 Pickup: Not scheduled")
+            
+            with col2:
+                if result.get("labels_downloaded"):
+                    st.success("📄 Labels: ✅ Downloaded")
+                else:
+                    st.info("📄 Labels: ⚠️ Not downloaded")
+            
+            with col3:
+                if result.get("manifest_generated"):
+                    st.success("📋 Manifest: ✅ Generated")
+                else:
+                    st.info("📋 Manifest: ⚠️ Not generated")
+            
             if result.get("shipped", 0) > 0:
-                st.success(f"✅ Successfully shipped {result['shipped']} orders!")
-                st.info("📥 Labels will be uploaded to GitHub shortly. Check staff dashboard!")
+                st.success(f"✅ Successfully processed {result['shipped']} orders!")
+                st.info("📥 Check staff dashboard for labels (GitHub upload coming soon)")
             else:
                 st.warning(f"⚠️ No orders shipped")
                 
                 if result.get("errors"):
                     with st.expander("❌ Error Details"):
                         for error in result["errors"]:
-                            st.error(error)
+                            if "Traceback" not in error:
+                                st.error(error)
             
             # Show details
             if result.get("details"):
