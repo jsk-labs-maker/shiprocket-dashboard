@@ -240,13 +240,15 @@ with col2:
             # Show results
             st.markdown("### 📊 Results")
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Orders", result.get("total_orders", 0))
+                st.metric("NEW Orders", result.get("total_orders", 0))
             with col2:
                 st.metric("✅ Shipped", result.get("shipped", 0))
             with col3:
-                st.metric("❌ Failed", result.get("unshipped", 0))
+                st.metric("❌ Failed", result.get("failed", 0))
+            with col4:
+                st.metric("⏭️ Skipped", result.get("skipped", 0))
             
             if result.get("shipped", 0) > 0:
                 st.success(f"✅ Successfully shipped {result['shipped']} orders!")
@@ -258,6 +260,12 @@ with col2:
                     with st.expander("❌ Error Details"):
                         for error in result["errors"]:
                             st.error(error)
+            
+            # Show details
+            if result.get("details"):
+                with st.expander("📋 Detailed Log"):
+                    for detail in result["details"]:
+                        st.text(detail)
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")

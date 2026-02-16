@@ -87,7 +87,25 @@ def get_new_orders(token, days=7):
     
     # Filter to only truly NEW orders (not shipped, not canceled)
     all_orders = response.json().get("data", [])
-    new_orders = [o for o in all_orders if o.get("status_code") == 6]  # Status code 6 = NEW
+    
+    # Status code 1 = NEW (ready to ship)
+    # Exclude: 5 = CANCELED, 18 = CANCELLATION REQUESTED, 4 = PICKUP SCHEDULED (already shipped)
+    new_orders = []
+    for order in all_orders:
+        status = order.get("status", "")
+        status_code = order.get("status_code")
+        
+        # Only include if status is "NEW"
+        if status == "NEW":
+            # Check if already has shipment with AWB (already shipped)
+            shipments = order.get("shipments", [])
+            if shipments:
+                shipment = shipments[0]
+                awb = shipment.get("awb_code")
+                if not awb:  # No AWB = not shipped yet
+                    new_orders.append(order)
+            else:
+                new_orders.append(order)
     
     return new_orders
 
@@ -114,8 +132,10 @@ def run_shipping_workflow():
     result = {
         "total_orders": 0,
         "shipped": 0,
-        "unshipped": 0,
-        "errors": []
+        "failed": 0,
+        "skipped": 0,
+        "errors": [],
+        "details": []
     }
     
     try:
@@ -127,29 +147,46 @@ def run_shipping_workflow():
         result["total_orders"] = len(orders)
         
         if not orders:
-            result["errors"].append("No NEW orders found")
+            result["errors"].append("No NEW orders found (all orders are either shipped, canceled, or not ready)")
             return result
         
         # Ship each order
         for order in orders:
-            shipment_id = order.get("shipments", [{}])[0].get("id") if order.get("shipments") else None
+            order_id = order.get("id")
             
-            if not shipment_id:
-                result["unshipped"] += 1
+            # Get shipment ID
+            shipments = order.get("shipments", [])
+            if not shipments:
+                result["skipped"] += 1
+                result["details"].append(f"Order #{order_id}: No shipment created yet")
                 continue
             
+            shipment_id = shipments[0].get("id")
+            if not shipment_id:
+                result["skipped"] += 1
+                result["details"].append(f"Order #{order_id}: No shipment ID")
+                continue
+            
+            # Try to ship
             success, response = ship_order(token, shipment_id)
             
             if success:
                 result["shipped"] += 1
+                awb = response.get("response", {}).get("data", {}).get("awb_assign_status", "Unknown")
+                result["details"].append(f"Order #{order_id}: ✅ Shipped (AWB assigned)")
             else:
-                result["unshipped"] += 1
+                result["failed"] += 1
+                error_msg = str(response)[:100]  # Limit error message length
+                result["details"].append(f"Order #{order_id}: ❌ Failed - {error_msg}")
         
-        if result["shipped"] == 0:
-            result["errors"].append("No orders were shipped successfully")
+        # Summary message
+        if result["shipped"] == 0 and result["total_orders"] > 0:
+            result["errors"].append(f"Found {result['total_orders']} NEW orders but could not ship any")
         
         return result
         
     except Exception as e:
         result["errors"].append(f"Workflow error: {str(e)}")
+        import traceback
+        result["errors"].append(traceback.format_exc())
         return result
