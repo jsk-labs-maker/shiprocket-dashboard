@@ -1,7 +1,14 @@
 {
-  "shiprocket": {"status": "unknown", "last_check": ""},
-  "github": {"status": "unknown", "last_check": ""},
-  "ollama": {"status": "unknown", "model": "", "last_check": ""},
-  "kluzo": {"status": "unknown", "last_check": ""},
-  "internet": {"status": "unknown", "last_check": ""}
+  "shiprocket": {
+    "status": "unknown",
+    "last_check": null,
+    "response_time_ms": null,
+    "wallet_balance": null
+  },
+  "github": {
+    "status": "unknown",
+    "last_check": null,
+    "response_time_ms": null
+  },
+  "updated_at": null
 }

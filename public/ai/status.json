@@ -1,6 +1,8 @@
 {
   "status": "idle",
+  "message": "Ready for tasks",
   "current_task": null,
-  "sub_agents": [],
-  "last_updated": ""
+  "progress": 0,
+  "started_at": null,
+  "updated_at": null
 }
