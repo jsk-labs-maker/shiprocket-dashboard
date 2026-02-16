@@ -1,17 +1,18 @@
 """
 Staff Dashboard - Simple Label Downloader
 ==========================================
-Super simple UI for warehouse staff to download labels.
-No login, just big buttons and easy downloads.
+Fetches labels from GitHub repo. No local files needed.
 
 Built by Kluzo 😎 for JSK Labs
 """
 
 import streamlit as st
-import os
-from pathlib import Path
-from datetime import datetime
+import requests
 import json
+from datetime import datetime
+from io import BytesIO
+import zipfile
+import tempfile
 
 st.set_page_config(
     page_title="📦 Labels - JSK Labs",
@@ -21,43 +22,28 @@ st.set_page_config(
 )
 
 # Configuration
-DATA_DIR = Path("data")
-LABELS_DIR = DATA_DIR / "labels"
-HISTORY_FILE = DATA_DIR / "shipping_history.json"
+GITHUB_REPO = "jsk-labs-maker/shiprocket-dashboard"
+GITHUB_BRANCH = "main"
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}"
 
 # --- Helper Functions ---
 
-def load_latest_labels():
-    """Load the most recent batch of sorted labels."""
-    if not LABELS_DIR.exists():
-        return None, []
-    
-    # Find latest date directory
-    date_dirs = [d for d in LABELS_DIR.iterdir() if d.is_dir() and d.name.startswith('2026')]
-    if not date_dirs:
-        return None, []
-    
-    latest_dir = sorted(date_dirs, reverse=True)[0]
-    
-    # Parse label files
-    labels = {}  # {sku: {courier: filepath}}
-    
-    for file in latest_dir.glob("*.pdf"):
-        if file.name.endswith("_raw.pdf"):
-            continue
-        
-        # Parse filename: YYYY-MM-DD_HHMM_SKU_Courier.pdf
-        parts = file.stem.split('_')
-        if len(parts) >= 4:
-            sku = parts[2]
-            courier = parts[3]
-            
-            if sku not in labels:
-                labels[sku] = {}
-            labels[sku][courier] = str(file)
-    
-    timestamp = datetime.strptime(latest_dir.name, '%Y-%m-%d_%H%M%S')
-    return timestamp, labels
+@st.cache_data(ttl=60)  # Cache for 1 minute
+def fetch_latest_labels():
+    """Fetch latest labels metadata from GitHub."""
+    try:
+        url = f"{GITHUB_RAW_BASE}/data/latest_labels.json"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except:
+        return None
+
+
+def get_zip_download_url(zip_filename):
+    """Get GitHub raw URL for ZIP file."""
+    return f"{GITHUB_RAW_BASE}/data/{zip_filename}"
 
 
 def get_courier_emoji(courier):
@@ -74,14 +60,16 @@ def get_courier_emoji(courier):
     return emoji_map.get(courier, '📦')
 
 
-def count_labels_in_pdf(filepath):
-    """Count pages in PDF (= number of labels)."""
+def download_and_extract_label(zip_url, filename):
+    """Download ZIP and extract specific label file."""
     try:
-        from pypdf import PdfReader
-        reader = PdfReader(filepath)
-        return len(reader.pages)
+        response = requests.get(zip_url, timeout=30)
+        if response.status_code == 200:
+            with zipfile.ZipFile(BytesIO(response.content)) as zf:
+                return zf.read(filename)
+        return None
     except:
-        return '?'
+        return None
 
 
 # --- UI ---
@@ -97,21 +85,64 @@ st.markdown("""
 
 st.markdown("---")
 
-# Load labels
-timestamp, labels = load_latest_labels()
+# Fetch labels
+with st.spinner("Loading labels..."):
+    labels_data = fetch_latest_labels()
 
-if not labels:
+if not labels_data:
     st.info("🔍 No labels available yet. Wait for orders to be processed.")
+    st.caption("Labels appear here after running 'Ship them buddy'")
     st.stop()
 
 # Show timestamp
-time_str = timestamp.strftime('%d %b %Y, %I:%M %p')
-st.markdown(f"<p style='text-align: center; color: #888;'>📅 {time_str}</p>", unsafe_allow_html=True)
+timestamp_str = labels_data.get("date_display", "Unknown")
+st.markdown(f"<p style='text-align: center; color: #888;'>📅 {timestamp_str}</p>", unsafe_allow_html=True)
+
+# Show summary stats
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("📦 Total", labels_data.get("total_orders", 0))
+with col2:
+    st.metric("✅ Shipped", labels_data.get("shipped", 0))
+with col3:
+    st.metric("❌ Unshipped", labels_data.get("unshipped", 0))
 
 st.markdown("---")
 
+# Get ZIP URL
+zip_filename = labels_data.get("zip_filename", "")
+zip_url = get_zip_download_url(zip_filename) if zip_filename else None
+
+# Download entire ZIP button
+if zip_url:
+    st.markdown("""
+    <div style='text-align: center; margin-bottom: 2rem;'>
+        <h3>📥 Download All Labels</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        response = requests.get(zip_url, timeout=30)
+        if response.status_code == 200:
+            st.download_button(
+                label="⬇️ Download All Labels (ZIP)",
+                data=response.content,
+                file_name=zip_filename,
+                mime="application/zip",
+                type="primary",
+                use_container_width=True
+            )
+    except:
+        st.error("Could not fetch labels from GitHub")
+
+st.markdown("---")
+st.markdown("<h3 style='text-align: center;'>📋 Labels by SKU</h3>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
 # Display labels organized by SKU
-for sku, couriers in sorted(labels.items()):
+labels_sorted = labels_data.get("labels_sorted", {})
+
+for sku, couriers in sorted(labels_sorted.items()):
     # SKU header with box
     st.markdown(f"""
     <div style='background: #f0f0f0; padding: 1rem; border-radius: 10px; margin-bottom: 1rem;'>
@@ -122,10 +153,11 @@ for sku, couriers in sorted(labels.items()):
     # Courier buttons
     cols = st.columns(len(couriers))
     
-    for i, (courier, filepath) in enumerate(sorted(couriers.items())):
+    for i, (courier, info) in enumerate(sorted(couriers.items())):
         with cols[i]:
-            # Count labels
-            label_count = count_labels_in_pdf(filepath)
+            label_count = info.get("count", 0)
+            filepath = info.get("path", "")
+            filename = filepath.split('/')[-1] if filepath else ""
             
             # Get emoji
             emoji = get_courier_emoji(courier)
@@ -140,15 +172,19 @@ for sku, couriers in sorted(labels.items()):
             """, unsafe_allow_html=True)
             
             # Download button
-            with open(filepath, 'rb') as f:
-                st.download_button(
-                    label=f"⬇️ Download",
-                    data=f.read(),
-                    file_name=Path(filepath).name,
-                    mime="application/pdf",
-                    key=f"dl_{sku}_{courier}",
-                    use_container_width=True
-                )
+            if zip_url and filename:
+                label_data = download_and_extract_label(zip_url, filename)
+                if label_data:
+                    st.download_button(
+                        label=f"⬇️ Download",
+                        data=label_data,
+                        file_name=filename,
+                        mime="application/pdf",
+                        key=f"dl_{sku}_{courier}",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("File not found", icon="⚠️")
     
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -161,11 +197,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Auto-refresh every 5 minutes
-st.markdown("""
-<script>
-setTimeout(function(){
-    window.location.reload();
-}, 300000);
-</script>
-""", unsafe_allow_html=True)
+# Refresh button
+if st.button("🔄 Refresh", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()

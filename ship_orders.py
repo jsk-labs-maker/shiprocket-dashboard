@@ -419,7 +419,63 @@ def run_full_workflow(days=7):
     # Save to history
     save_history(result)
     
+    # Create ZIP and push to GitHub
+    try:
+        print("\n📤 Uploading to GitHub...")
+        upload_to_github(result)
+        print("   ✅ Uploaded to GitHub")
+    except Exception as e:
+        print(f"   ⚠️ GitHub upload failed: {e}")
+        result["errors"].append(f"GitHub upload failed: {str(e)}")
+    
     return result
+
+
+def upload_to_github(result):
+    """Create ZIP of sorted labels and push to GitHub."""
+    import zipfile
+    import subprocess
+    
+    timestamp = datetime.now()
+    date_str = timestamp.strftime('%Y-%m-%d_%H%M%S')
+    
+    # Create ZIP with all sorted labels
+    zip_path = DATA_DIR / f"labels_{date_str}.zip"
+    
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        # Add all sorted label files
+        labels_sorted = result.get("labels_sorted", {})
+        for sku, couriers in labels_sorted.items():
+            for courier, info in couriers.items():
+                filepath = info.get("path")
+                if filepath and os.path.exists(filepath):
+                    zf.write(filepath, arcname=os.path.basename(filepath))
+        
+        # Add manifest if available
+        manifest_path = result.get("manifest_path")
+        if manifest_path and os.path.exists(manifest_path):
+            zf.write(manifest_path, arcname=os.path.basename(manifest_path))
+    
+    # Create metadata JSON
+    metadata = {
+        "timestamp": timestamp.isoformat(),
+        "date_display": timestamp.strftime('%d %b %Y, %I:%M %p'),
+        "total_orders": result.get("total_orders", 0),
+        "shipped": result.get("shipped", 0),
+        "unshipped": result.get("unshipped", 0),
+        "labels_sorted": result.get("labels_sorted", {}),
+        "zip_filename": f"labels_{date_str}.zip"
+    }
+    
+    metadata_path = DATA_DIR / "latest_labels.json"
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    # Git commit and push
+    repo_path = Path(__file__).parent
+    subprocess.run(["git", "add", str(zip_path), str(metadata_path)], cwd=repo_path, check=True)
+    subprocess.run(["git", "commit", "-m", f"📦 Labels update - {date_str}"], cwd=repo_path, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=repo_path, check=True)
 
 
 if __name__ == "__main__":
