@@ -119,8 +119,79 @@ def download_file(url, filepath):
     return False
 
 
+def sort_labels_by_sku_courier(input_pdf_path, output_dir):
+    """Sort labels PDF by SKU + Courier. Returns nested dict of sku -> courier -> filepath."""
+    try:
+        from pypdf import PdfReader, PdfWriter
+        import re
+        from collections import defaultdict
+        
+        reader = PdfReader(input_pdf_path)
+        # Nested dict: sku_courier_pages[(sku, courier)] = [page_indices]
+        sku_courier_pages = defaultdict(list)
+        
+        courier_patterns = [
+            (r'Ekart', 'Ekart'),
+            (r'Delhivery', 'Delhivery'),
+            (r'Xpressbees', 'Xpressbees'),
+            (r'BlueDart', 'BlueDart'),
+            (r'DTDC', 'DTDC'),
+            (r'Shadowfax', 'Shadowfax'),
+            (r'Ecom\s*Express', 'EcomExpress'),
+        ]
+        
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text() or ''
+            
+            # Extract courier
+            courier = 'Unknown'
+            for pattern, name in courier_patterns:
+                if re.search(pattern, text, re.IGNORECASE):
+                    courier = name
+                    break
+            
+            # Extract SKU
+            sku = 'Unknown'
+            sku_match = re.search(r'SKU[:\s]*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
+            if sku_match:
+                sku = sku_match.group(1).strip()
+                # Clean up SKU for filename
+                sku = re.sub(r'[^\w\-]', '', sku)[:30]
+            
+            sku_courier_pages[(sku, courier)].append(i)
+        
+        # Create sorted PDFs
+        sorted_files = {}  # {sku: {courier: {path, count}}}
+        date_str = datetime.now().strftime('%Y-%m-%d_%H%M')
+        
+        for (sku, courier), page_indices in sku_courier_pages.items():
+            if page_indices:
+                writer = PdfWriter()
+                for idx in page_indices:
+                    writer.add_page(reader.pages[idx])
+                
+                filename = f"{date_str}_{sku}_{courier}.pdf"
+                filepath = output_dir / filename
+                with open(filepath, 'wb') as f:
+                    writer.write(f)
+                
+                if sku not in sorted_files:
+                    sorted_files[sku] = {}
+                
+                sorted_files[sku][courier] = {
+                    'path': str(filepath),
+                    'count': len(page_indices)
+                }
+        
+        return sorted_files
+    
+    except Exception as e:
+        print(f"Error sorting labels: {e}")
+        return {}
+
+
 def sort_labels_by_courier(input_pdf_path, output_dir):
-    """Sort labels PDF by courier. Returns dict of courier -> filepath."""
+    """Sort labels PDF by courier only (legacy). Returns dict of courier -> filepath."""
     try:
         from pypdf import PdfReader, PdfWriter
         import re
@@ -305,11 +376,13 @@ def run_full_workflow(days=7):
                 # Download and sort labels
                 raw_labels_path = LABELS_DIR / f"{date_str}_raw.pdf"
                 if download_file(label_url, raw_labels_path):
-                    print("   Labels downloaded, sorting by courier...")
+                    print("   Labels downloaded, sorting by SKU + Courier...")
                     sorted_dir = LABELS_DIR / date_str
                     sorted_dir.mkdir(exist_ok=True)
-                    result["labels_sorted"] = sort_labels_by_courier(raw_labels_path, sorted_dir)
-                    print(f"   Sorted into {len(result['labels_sorted'])} courier files")
+                    result["labels_sorted"] = sort_labels_by_sku_courier(raw_labels_path, sorted_dir)
+                    # Count total files
+                    total_files = sum(len(couriers) for couriers in result["labels_sorted"].values())
+                    print(f"   Sorted into {total_files} files ({len(result['labels_sorted'])} SKUs)")
         
         # Step 4: Schedule pickup
         print("🚚 Scheduling pickup...")
@@ -364,9 +437,11 @@ if __name__ == "__main__":
     print(f"Unshipped: {result['unshipped']}")
     
     if result['labels_sorted']:
-        print("\nSorted Labels:")
-        for courier, info in result['labels_sorted'].items():
-            print(f"  {courier}: {info['count']} labels")
+        print("\nSorted Labels (SKU + Courier):")
+        for sku, couriers in result['labels_sorted'].items():
+            print(f"  📦 {sku}:")
+            for courier, info in couriers.items():
+                print(f"      {courier}: {info['count']} labels")
     
     if result['errors']:
         print("\nErrors:")
