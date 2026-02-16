@@ -87,11 +87,9 @@ def schedule_pickup(token, shipment_ids):
     url = f"{BASE_URL}/courier/generate/pickup"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
-    pickup_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    
+    # Just pass shipment_ids, no pickup_date needed
     response = requests.post(url, headers=headers, json={
-        "shipment_id": shipment_ids,
-        "pickup_date": pickup_date
+        "shipment_id": shipment_ids
     })
     response.raise_for_status()
     return response.json()
