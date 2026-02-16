@@ -1,6 +1,6 @@
 {
   "status": "processing",
-  "message": "Authenticating with Shiprocket...",
-  "timestamp": "2026-02-16T20:54:21.299969",
-  "progress": 20
+  "message": "Fetching NEW orders...",
+  "timestamp": "2026-02-16T20:54:22.980678",
+  "progress": 30
 }
