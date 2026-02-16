@@ -156,6 +156,10 @@ else:
         
         with col1:
             balance = get_wallet_balance(token)
+            try:
+                balance = float(balance) if balance else 0
+            except:
+                balance = 0
             st.metric("💰 Wallet", f"₹{balance:,.2f}")
         
         with col2:
