@@ -212,9 +212,69 @@ with col1:
 
 with col2:
     st.markdown("### ⚡ Quick Actions")
-    if st.button("🚀 Ship Now", use_container_width=True):
-        st.info("💬 Send to Telegram:")
-        st.code("Ship them buddy")
+    if st.button("🚀 Ship Orders Now", type="primary", use_container_width=True):
+        import subprocess
+        from pathlib import Path
+        
+        st.info("🔄 Starting shipping workflow...")
+        
+        # Progress placeholder
+        progress_text = st.empty()
+        progress_bar = st.progress(0)
+        
+        try:
+            # Run ship_orders.py script
+            script_path = Path(__file__).parent / "ship_orders.py"
+            
+            # Check if script exists
+            if not script_path.exists():
+                st.error(f"❌ Script not found: {script_path}")
+            else:
+                progress_text.text("🔐 Authenticating...")
+                progress_bar.progress(10)
+                
+                # Run the script
+                result = subprocess.run(
+                    ["python3", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                
+                progress_bar.progress(100)
+                
+                # Parse output
+                output = result.stdout
+                
+                if result.returncode == 0:
+                    # Extract summary from output
+                    if "Shipped:" in output:
+                        lines = output.split('\n')
+                        for line in lines:
+                            if "Shipped:" in line:
+                                st.success(f"✅ {line.strip()}")
+                            elif "Total Orders:" in line:
+                                st.info(line.strip())
+                    
+                    st.success("✅ Workflow complete! Check staff dashboard for labels.")
+                    
+                    # Show full output in expander
+                    with st.expander("📋 Full Log"):
+                        st.code(output)
+                else:
+                    st.error("❌ Workflow failed")
+                    st.code(output)
+                    if result.stderr:
+                        st.error("Error details:")
+                        st.code(result.stderr)
+                
+        except subprocess.TimeoutExpired:
+            st.error("❌ Workflow timed out (>5 minutes)")
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+        finally:
+            progress_text.empty()
+            progress_bar.empty()
     
     if st.button("🔄 Refresh Data", use_container_width=True):
         st.cache_data.clear()
