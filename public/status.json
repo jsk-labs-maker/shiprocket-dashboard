@@ -1,6 +1,6 @@
 {
   "status": "processing",
-  "message": "Starting workflow...",
-  "timestamp": "2026-02-16T20:54:19.783814",
-  "progress": 10
+  "message": "Authenticating with Shiprocket...",
+  "timestamp": "2026-02-16T20:54:21.299969",
+  "progress": 20
 }
