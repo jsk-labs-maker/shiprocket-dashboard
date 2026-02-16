@@ -30,42 +30,96 @@ SHIPROCKET_API_BASE = "https://apiv2.shiprocket.in/v1/external"
 
 def shiprocket_authenticate():
     """Authenticate with Shiprocket API."""
-    # For now, show message that credentials needed
-    # In production, read from Streamlit secrets
-    st.warning("⚠️ Shiprocket credentials needed. Set in Streamlit Secrets.")
-    return None
+    try:
+        # Try to get from Streamlit secrets first
+        if hasattr(st, 'secrets') and 'shiprocket' in st.secrets:
+            email = st.secrets['shiprocket']['email']
+            password = st.secrets['shiprocket']['password']
+        else:
+            # Fallback to env file for local testing
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            email = os.getenv('SHIPROCKET_EMAIL')
+            password = os.getenv('SHIPROCKET_PASSWORD')
+        
+        if not email or not password:
+            return None
+        
+        url = f"{SHIPROCKET_API_BASE}/auth/login"
+        response = requests.post(url, json={"email": email, "password": password}, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()["token"]
+        return None
+    except Exception as e:
+        st.error(f"Authentication failed: {str(e)}")
+        return None
+
+def get_shipment_id_by_awb(awb, token):
+    """Get shipment ID for an AWB number."""
+    url = f"{SHIPROCKET_API_BASE}/courier/track/awb/{awb}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            tracking_data = data.get("tracking_data", {})
+            return tracking_data.get("shipment_id")
+        return None
+    except:
+        return None
+
 
 def download_labels_by_awb(awb_list, token):
     """Download labels for given AWB numbers."""
     if not token:
-        return None
+        return None, []
     
+    results = []
+    shipment_ids = []
+    
+    # Step 1: Convert AWBs to shipment IDs
+    for awb in awb_list:
+        shipment_id = get_shipment_id_by_awb(awb, token)
+        if shipment_id:
+            shipment_ids.append(shipment_id)
+            results.append({"awb": awb, "status": "found", "shipment_id": shipment_id})
+        else:
+            results.append({"awb": awb, "status": "not_found"})
+    
+    if not shipment_ids:
+        return None, results
+    
+    # Step 2: Download labels for all shipment IDs
     url = f"{SHIPROCKET_API_BASE}/courier/generate/label"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
     
-    # Note: Shiprocket API uses shipment_id, not AWB
-    # We'll need to first convert AWB to shipment_id
-    # For now, show placeholder
-    
-    payload = {
-        "awbs": awb_list  # This might need adjustment based on actual API
-    }
+    payload = {"shipment_id": shipment_ids}
     
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         if response.status_code == 200:
             data = response.json()
             label_url = data.get("label_url")
+            
             if label_url:
+                # Download the PDF
                 label_response = requests.get(label_url, timeout=30)
-                return label_response.content
-        return None
+                if label_response.status_code == 200:
+                    return label_response.content, results
+        
+        return None, results
     except Exception as e:
-        st.error(f"Error: {str(e)}")
-        return None
+        st.error(f"Download error: {str(e)}")
+        return None, results
 
 @st.cache_data(ttl=10)
 def fetch_processing_status():
@@ -202,25 +256,64 @@ with col1:
             # Parse AWB numbers
             awb_list = [line.strip() for line in awb_input.strip().split('\n') if line.strip()]
             
-            st.info(f"🔍 Found {len(awb_list)} AWB numbers")
+            st.info(f"🔍 Processing {len(awb_list)} AWB numbers...")
             
-            # For now, show implementation note
-            st.warning("""
-            **⚙️ Implementation Note:**
+            # Authenticate
+            with st.spinner("🔐 Authenticating..."):
+                token = shiprocket_authenticate()
             
-            This feature needs Shiprocket API credentials configured.
-            
-            **Two options:**
-            1. **Via Telegram** (Recommended): Message me the AWBs, I'll send labels
-            2. **Direct API**: Add Shiprocket credentials to Streamlit Secrets
-            
-            For now, use option 1 - message me on Telegram! 📱
-            """)
-            
-            # Show parsed AWBs
-            with st.expander("AWB List"):
-                for i, awb in enumerate(awb_list, 1):
-                    st.code(f"{i}. {awb}")
+            if not token:
+                st.error("❌ Authentication failed. Please configure Shiprocket credentials in Streamlit Secrets.")
+                st.info("""
+                **Setup Instructions:**
+                1. Go to Streamlit Cloud dashboard
+                2. Open app settings → Secrets
+                3. Add:
+                ```toml
+                [shiprocket]
+                email = "openclawd12@gmail.com"
+                password = "Kluzo@1212"
+                ```
+                """)
+            else:
+                # Download labels
+                with st.spinner("📥 Downloading labels..."):
+                    pdf_data, results = download_labels_by_awb(awb_list, token)
+                
+                # Show results
+                st.markdown("### 📋 Results")
+                
+                found = [r for r in results if r["status"] == "found"]
+                not_found = [r for r in results if r["status"] == "not_found"]
+                
+                if found:
+                    st.success(f"✅ Found {len(found)} labels")
+                    for r in found:
+                        st.text(f"✓ {r['awb']}")
+                
+                if not_found:
+                    st.warning(f"⚠️ Not found: {len(not_found)}")
+                    for r in not_found:
+                        st.text(f"✗ {r['awb']}")
+                
+                # Download button
+                if pdf_data:
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+                    filename = f"labels_{timestamp}.pdf"
+                    
+                    st.download_button(
+                        label="📥 Download All Labels (PDF)",
+                        data=pdf_data,
+                        file_name=filename,
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
+                    
+                    st.success(f"✅ Ready! Click above to download {len(found)} labels")
+                else:
+                    st.error("❌ Could not generate labels PDF")
 
 with col2:
     st.caption("""
@@ -228,6 +321,7 @@ with col2:
     - Paste one AWB per line
     - Can handle 100+ AWBs at once
     - Works for ANY order (not just our batches)
+    - Download includes all found labels in one PDF
     """)
 
 st.markdown("---")
