@@ -1172,12 +1172,59 @@ else:
 
 # === SIDEBAR ===
 with st.sidebar:
+    # Get AI status from status.json
+    ai_status_file = os.path.join(SCRIPT_DIR, "public", "ai", "status.json")
+    ai_status = "idle"
+    ai_status_text = "Idle"
+    try:
+        if os.path.exists(ai_status_file):
+            with open(ai_status_file, "r") as f:
+                ai_data = json.load(f)
+            status = ai_data.get("status", "idle").lower()
+            # Check if status is recent (within last 5 minutes)
+            updated_at = ai_data.get("updated_at", "")
+            if updated_at:
+                from datetime import datetime
+                try:
+                    last_update = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+                    now = datetime.now()
+                    if hasattr(last_update, 'tzinfo') and last_update.tzinfo:
+                        now = datetime.now(last_update.tzinfo)
+                    diff_minutes = (now - last_update.replace(tzinfo=None)).total_seconds() / 60
+                    if diff_minutes > 5:
+                        status = "idle"  # If no update in 5 min, consider idle
+                except:
+                    pass
+            if status in ["processing", "working", "busy"]:
+                ai_status = "working"
+                ai_status_text = "Working"
+            else:
+                ai_status = "idle"
+                ai_status_text = "Idle"
+    except:
+        ai_status = "idle"
+        ai_status_text = "Idle"
+    
+    # Status dot color
+    status_dot_class = "working" if ai_status == "working" else ""
+    
     # Profile with actual Kluzo logo
     st.markdown(f"""
+    <style>
+    .status-dot.working {{
+        background: #3b82f6 !important;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.8) !important;
+        animation: pulse-blue 2s infinite !important;
+    }}
+    @keyframes pulse-blue {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.5; }}
+    }}
+    </style>
     <div class="profile-box">
         {logo_html}
         <div class="profile-name">Kluzo</div>
-        <div class="profile-status"><span class="status-dot"></span> AI Assistant</div>
+        <div class="profile-status"><span class="status-dot {status_dot_class}"></span> {ai_status_text}</div>
     </div>
     """, unsafe_allow_html=True)
     

@@ -1,8 +1,8 @@
 {
-  "status": "processing",
-  "message": "Shipping 21 orders...",
-  "current_task": "Shipping 21 orders...",
-  "timestamp": "2026-02-17T18:01:33.005814",
-  "updated_at": "2026-02-17T18:01:33.005835",
-  "progress": 40
+  "status": "idle",
+  "message": "",
+  "current_task": null,
+  "timestamp": "2026-02-17T19:36:00.000000",
+  "updated_at": "2026-02-17T19:36:00.000000",
+  "progress": 0
 }
