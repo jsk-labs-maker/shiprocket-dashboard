@@ -1275,12 +1275,31 @@ with st.sidebar:
     if awb_lookup:
         with st.spinner("Tracking..."):
             try:
-                # Get token
-                from dotenv import load_dotenv
-                load_dotenv("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env")
-                import os
-                email = os.getenv('SHIPROCKET_EMAIL')
-                pwd = os.getenv('SHIPROCKET_PASSWORD')
+                # Get credentials - try Streamlit secrets first, then env file
+                email = None
+                pwd = None
+                
+                # Try Streamlit secrets first (for cloud deployment)
+                try:
+                    email = st.secrets.get("SHIPROCKET_EMAIL")
+                    pwd = st.secrets.get("SHIPROCKET_PASSWORD")
+                except:
+                    pass
+                
+                # Fallback to env file (for local development)
+                if not email or not pwd:
+                    try:
+                        from dotenv import load_dotenv
+                        load_dotenv(os.path.join(SCRIPT_DIR, ".env"))
+                        email = os.getenv('SHIPROCKET_EMAIL')
+                        pwd = os.getenv('SHIPROCKET_PASSWORD')
+                    except:
+                        pass
+                
+                # Final fallback - hardcoded (for demo)
+                if not email or not pwd:
+                    email = "openclawd12@gmail.com"
+                    pwd = "Kluzo@1212"
                 
                 auth_r = requests.post(
                     f"{SHIPROCKET_API}/auth/login",
