@@ -1294,10 +1294,7 @@ st.markdown(f"""
 <div class="header-bar">
     <div class="header-left">
         <div class="header-title">Kluzo <span class="online-dot"></span></div>
-        <div class="tab-nav">
-            <span class="tab active">Dashboard</span>
-            <span class="tab">📁 Documents</span>
-        </div>
+        <div class="tab-nav" id="tabs"></div>
     </div>
     <div class="header-right">
         <span>Last sync: {last_sync}</span>
@@ -1307,8 +1304,62 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# === PAGE TABS ===
+tab_dashboard, tab_documents = st.tabs(["🏠 Dashboard", "📁 Documents"])
 
-# === SEARCH BAR ===
+with tab_documents:
+    st.markdown("### 📁 Documents (Last 7 Days)")
+    st.markdown("All your downloaded labels, manifests, and files are stored here.")
+    st.markdown("---")
+    
+    # Load and display documents
+    all_docs = get_documents()
+    
+    if all_docs:
+        for i, doc in enumerate(all_docs):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                doc_type = doc.get("type", "file")
+                icon = "🏷️" if doc_type == "labels" else "📄" if doc_type == "manifest" else "📁"
+                st.markdown(f"**{icon} {doc.get('filename', 'Unknown')}**")
+                size_kb = doc.get("size", 0) / 1024
+                size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
+                created = doc.get("created_at", "")[:16].replace("T", " ")
+                st.caption(f"📅 {created} • 💾 {size_str}")
+            with col2:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                filepath = os.path.join(script_dir, "public", "documents", doc.get("filename", ""))
+                if os.path.exists(filepath):
+                    with open(filepath, "rb") as f:
+                        st.download_button(
+                            label="📥 Download",
+                            data=f.read(),
+                            file_name=doc.get("filename", "download"),
+                            mime="application/octet-stream",
+                            key=f"doc_download_{i}",
+                            use_container_width=True
+                        )
+            with col3:
+                if st.button("🗑️", key=f"doc_delete_{i}", help="Delete this document"):
+                    # Delete document
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                    docs = get_documents()
+                    docs = [d for d in docs if d.get("filename") != doc.get("filename")]
+                    save_documents_index(docs)
+                    st.rerun()
+            st.markdown("---")
+    else:
+        st.info("📭 No documents yet. Run 'Ship them buddy' or download labels to see files here!")
+    
+    # Manual cleanup button
+    if st.button("🧹 Clean up old files", help="Delete files older than 7 days"):
+        delete_old_documents()
+        st.success("✅ Cleanup complete!")
+        st.rerun()
+
+with tab_dashboard:
+    # === SEARCH BAR ===
 search_col1, search_col2 = st.columns([4, 1])
 with search_col1:
     search_query = st.text_input(
@@ -1668,46 +1719,6 @@ with b2:
             if st.button("❌ Cancel", use_container_width=True):
                 st.session_state.show_add_note = False
                 st.rerun()
-
-
-# === DOCUMENTS SECTION ===
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Load documents
-all_documents = get_documents()
-
-# Build documents HTML
-doc_items = ""
-if all_documents:
-    for d in all_documents[:10]:
-        doc_type = d.get("type", "file")
-        icon = "🏷️" if doc_type == "labels" else "📄" if doc_type == "manifest" else "📁"
-        size_kb = d.get("size", 0) / 1024
-        size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
-        created = d.get("created_at", "")[:16].replace("T", " ")
-        doc_items += f'<div class="schedule"><div><div class="sched-name">{icon} {d.get("filename", "Unknown")}</div><div class="sched-meta">{created} • {size_str}</div></div></div>'
-else:
-    doc_items = '<div class="empty-state">No documents yet. Run "Ship them buddy" to generate labels!</div>'
-
-docs_html = f'<div class="section-box"><div class="section-title">📁 Documents (Last 7 Days)</div><div class="section-content">{doc_items}</div></div>'
-st.markdown(docs_html, unsafe_allow_html=True)
-
-# Document download buttons
-if all_documents:
-    doc_cols = st.columns(min(len(all_documents), 4))
-    for i, doc in enumerate(all_documents[:4]):
-        with doc_cols[i]:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            filepath = os.path.join(script_dir, "public", "documents", doc.get("filename", ""))
-            if os.path.exists(filepath):
-                with open(filepath, "rb") as f:
-                    st.download_button(
-                        label=f"📥 {doc.get('filename', '')[:20]}...",
-                        data=f.read(),
-                        file_name=doc.get("filename", "download"),
-                        mime="application/octet-stream",
-                        key=f"doc_dl_{i}"
-                    )
 
 
 # === SHIP NOW HANDLER ===
