@@ -154,7 +154,7 @@ def get_orders_by_date_range(token, from_date, to_date):
 
 def categorize_status(status):
     """Group Shiprocket statuses into 5 categories"""
-    status = status.upper() if status else ""
+    status = str(status).upper() if status else ""
     
     # Unshipped orders (not yet dispatched)
     unshipped_statuses = [
