@@ -8,6 +8,7 @@ Built by Kluzo 😎 for JSK Labs
 """
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import requests
 from datetime import datetime, timedelta
 import json
@@ -21,6 +22,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Auto-refresh every 60 seconds (60000 ms)
+st_autorefresh(interval=60000, limit=None, key="auto_refresh")
 
 # === CONSTANTS ===
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jsk-labs-maker/shiprocket-dashboard/main/public"
