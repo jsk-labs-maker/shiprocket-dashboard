@@ -42,37 +42,40 @@ def categorize_status(status):
         if s in status:
             return "rto"
     
-    # Unshipped
-    unshipped = ["NEW", "INVOICED", "CANCELLED", "CANCELED", "CANCELLATION REQUESTED", 
-                 "AWB ASSIGNED", "LABEL GENERATED", "PICKUP SCHEDULED", "PICKUP QUEUED",
-                 "MANIFEST GENERATED", "SHIPPED", "PENDING", "OUT FOR PICKUP"]
-    for s in unshipped:
-        if s in status:
-            return "unshipped"
-    
-    if "CANCEL" in status:
-        return "unshipped"
-    
-    # Undelivered
-    undelivered = ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED"]
-    for s in undelivered:
-        if s in status:
-            return "undelivered"
-    
-    # Delivered
+    # Delivered FIRST (most important)
     delivered = ["DELIVERED", "COMPLETE", "FULFILLED"]
     for s in delivered:
         if s in status:
             return "delivered"
     
-    # In-Transit (only specific statuses)
-    intransit = ["DELIVERY DELAYED", "IN TRANSIT", "MISROUTED", "OUT FOR DELIVERY", 
-                 "PICKED UP", "REACHED AT DESTINATION HUB", "REACHED DESTINATION HUB"]
+    # Undelivered (failed attempts)
+    undelivered = ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED"]
+    for s in undelivered:
+        if s in status:
+            return "undelivered"
+    
+    # In-Transit (shipped and on the way)
+    intransit = ["SHIPPED", "IN TRANSIT", "IN-TRANSIT", "PICKED UP", "OUT FOR DELIVERY",
+                 "REACHED AT DESTINATION HUB", "REACHED DESTINATION HUB", 
+                 "DELIVERY DELAYED", "MISROUTED", "HANDOVER", "IN FLIGHT"]
     for s in intransit:
         if s in status:
             return "intransit"
     
-    return "unshipped"
+    # Unshipped (not yet handed to courier)
+    unshipped = ["NEW", "INVOICED", "PENDING", "AWB ASSIGNED", "LABEL GENERATED", 
+                 "PICKUP SCHEDULED", "PICKUP QUEUED", "MANIFEST GENERATED", 
+                 "OUT FOR PICKUP", "SHIPMENT BOOKED"]
+    for s in unshipped:
+        if s in status:
+            return "unshipped"
+    
+    # Cancelled (separate from unshipped)
+    if "CANCEL" in status:
+        return "unshipped"
+    
+    # Default: intransit for unknown shipped statuses
+    return "intransit"
 
 def fetch_data(email, password, from_date, to_date):
     """Fetch orders from Shiprocket API"""
