@@ -1304,10 +1304,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# === PAGE TABS ===
-tab_dashboard, tab_documents = st.tabs(["🏠 Dashboard", "📁 Documents"])
+# === PAGE SELECTOR ===
+page = st.radio("", ["🏠 Dashboard", "📁 Documents"], horizontal=True, label_visibility="collapsed")
 
-with tab_documents:
+if page == "📁 Documents":
+    # === DOCUMENTS PAGE ===
     st.markdown("### 📁 Documents (Last 7 Days)")
     st.markdown("All your downloaded labels, manifests, and files are stored here.")
     st.markdown("---")
@@ -1357,9 +1358,11 @@ with tab_documents:
         delete_old_documents()
         st.success("✅ Cleanup complete!")
         st.rerun()
+    
+    st.stop()  # Stop here for Documents page
 
-with tab_dashboard:
-    # === SEARCH BAR ===
+# === DASHBOARD PAGE ===
+# === SEARCH BAR ===
 search_col1, search_col2 = st.columns([4, 1])
 with search_col1:
     search_query = st.text_input(
