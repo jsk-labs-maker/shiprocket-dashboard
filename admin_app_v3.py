@@ -694,7 +694,7 @@ def get_tasks():
         return r.json().get("tasks", []) if r.ok else []
     except: return []
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=15)  # Refresh every 15 seconds
 def get_batches():
     """Load batches from local file first, fallback to GitHub."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -857,7 +857,7 @@ def _save_cached_sr_data(data):
     except:
         pass
 
-@st.cache_data(ttl=120)  # Cache for 2 minutes
+@st.cache_data(ttl=60)  # Refresh every 60 seconds (sync with auto-refresh)
 def get_shiprocket_data():
     """Fetch wallet balance and new order count from Shiprocket API."""
     email, pwd = get_shiprocket_credentials()
@@ -1159,6 +1159,7 @@ if search_query:
     st.markdown("---")
 
 # === LIVE STATS BAR ===
+total_today = sum(b.get("total_orders", 0) for b in today_batches)
 st.markdown(f"""
 <div class="stats-bar animate-slide">
     <div class="stat-item">
@@ -1172,8 +1173,8 @@ st.markdown(f"""
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
-        <div class="stat-value">⏱️ 2.3m</div>
-        <div class="stat-label">Avg per Order</div>
+        <div class="stat-value">✅ {success_rate:.0f}%</div>
+        <div class="stat-label">Success Rate</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
