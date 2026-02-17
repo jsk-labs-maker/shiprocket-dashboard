@@ -109,16 +109,18 @@ st.markdown("### 🔄 Data Controls")
 col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
 with col1:
-    date_mode = st.radio("Mode", ["Preset", "Custom"], horizontal=True)
+    date_mode = st.radio("Mode", ["Preset", "Custom Days", "Date Range"], horizontal=True)
 
 with col2:
     if date_mode == "Preset":
         days = st.selectbox("Period", [30, 60, 90, 180, 365], format_func=lambda x: f"Last {x} Days")
+    elif date_mode == "Custom Days":
+        days = st.number_input("Days", min_value=1, max_value=730, value=45, step=1)
     else:
         from_date = st.date_input("From", value=datetime.now() - timedelta(days=30))
 
 with col3:
-    if date_mode == "Custom":
+    if date_mode == "Date Range":
         to_date = st.date_input("To", value=datetime.now())
     else:
         st.write("")
@@ -127,7 +129,7 @@ with col4:
     st.write("")
     if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
         with st.spinner("⏳ Fetching data from Shiprocket..."):
-            if date_mode == "Preset":
+            if date_mode in ["Preset", "Custom Days"]:
                 success, stdout, stderr = refresh_data(days=days)
             else:
                 success, stdout, stderr = refresh_data(
