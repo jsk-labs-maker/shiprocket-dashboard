@@ -1,10 +1,11 @@
 """
-🎛️ JSK Labs Admin Dashboard - Premium v3.5
+🎛️ JSK Labs Admin Dashboard - Premium v3.6
 ==========================================
 All enhancements: Glassmorphism, Animations, Live Stats, Activity Feed,
 Courier Health, Daily Summary, Gradients, and more!
 
 Built by Kluzo 😎 for JSK Labs
+Version: 3.6 (2026-02-17) - Fixed SCRIPT_DIR global constant
 """
 
 import streamlit as st
