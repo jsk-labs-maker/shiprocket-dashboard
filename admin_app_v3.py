@@ -1767,14 +1767,40 @@ st.markdown("<br>", unsafe_allow_html=True)
 b1, b2 = st.columns(2, gap="medium")
 
 with b1:
-    # Build schedules HTML in one block with scrollable content
-    sched_items = ""
-    for s in schedules[:10]:  # Show more schedules (scrollable)
-        days = ", ".join(s.get("days", [])[:3])
-        sched_items += f'<div class="schedule"><div><div class="sched-name">{s.get("name","")}</div><div class="sched-meta">{s.get("time","")} • {days}</div></div><span class="sched-badge">✓ Active</span></div>'
+    # Scheduled Deliverables with toggles
+    st.markdown('<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div></div>', unsafe_allow_html=True)
     
-    schedules_html = f'<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div><div class="section-content">{sched_items}</div></div>'
-    st.markdown(schedules_html, unsafe_allow_html=True)
+    # Load local schedules file for editing
+    sched_file = os.path.join(script_dir, "public", "schedules", "schedules.json")
+    try:
+        with open(sched_file, "r") as f:
+            local_schedules = json.load(f)
+    except:
+        local_schedules = {"schedules": schedules, "updated_at": ""}
+    
+    schedule_changed = False
+    for i, s in enumerate(local_schedules.get("schedules", [])[:5]):
+        days = ", ".join(s.get("days", [])[:3])
+        cols = st.columns([3, 1])
+        with cols[0]:
+            st.markdown(f"""
+                <div style="padding: 8px 0;">
+                    <div style="font-weight: 600; color: #fff;">{s.get("name","")}</div>
+                    <div style="font-size: 12px; color: #888;">{s.get("time","")} • {days}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with cols[1]:
+            new_state = st.toggle("", value=s.get("active", True), key=f"sched_toggle_{i}", label_visibility="collapsed")
+            if new_state != s.get("active", True):
+                local_schedules["schedules"][i]["active"] = new_state
+                schedule_changed = True
+    
+    # Save if changed
+    if schedule_changed:
+        local_schedules["updated_at"] = datetime.now().isoformat()
+        with open(sched_file, "w") as f:
+            json.dump(local_schedules, f, indent=2)
+        st.rerun()
 
 with b2:
     # Build notes HTML in one block with scrollable content
