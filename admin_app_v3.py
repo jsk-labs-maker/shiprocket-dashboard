@@ -1317,7 +1317,7 @@ default_page = "📁 Documents" if st.session_state.get("go_to_documents") else 
 if st.session_state.get("go_to_documents"):
     st.session_state.go_to_documents = False
 
-page = st.radio("", ["🏠 Dashboard", "📁 Documents", "⚙️ Settings"], horizontal=True, label_visibility="collapsed", index=0 if default_page == "🏠 Dashboard" else 1)
+page = st.radio("", ["🏠 Dashboard", "📁 Documents", "📈 Analytics", "📥 Bulk Download", "⚙️ Settings"], horizontal=True, label_visibility="collapsed", index=0 if default_page == "🏠 Dashboard" else 1)
 
 if page == "📁 Documents":
     # === DOCUMENTS PAGE ===
@@ -1372,6 +1372,162 @@ if page == "📁 Documents":
         st.rerun()
     
     st.stop()  # Stop here for Documents page
+
+if page == "📈 Analytics":
+    # === ANALYTICS PAGE ===
+    st.markdown("### 📈 SKU Delivery Analytics")
+    st.caption("Track delivery performance by SKU")
+    st.markdown("---")
+    
+    # Load analytics data
+    analytics_csv = os.path.join(SCRIPT_DIR, "data", "analytics_data.csv")
+    analytics_stats = os.path.join(SCRIPT_DIR, "data", "analytics_stats.json")
+    
+    if os.path.exists(analytics_csv) and os.path.exists(analytics_stats):
+        import pandas as pd
+        df = pd.read_csv(analytics_csv)
+        with open(analytics_stats, "r") as f:
+            stats = json.load(f)
+        
+        st.info(f"📁 **Data:** {stats.get('from_date', 'N/A')} to {stats.get('to_date', 'N/A')} • {stats.get('total', 0)} orders")
+        
+        # Stats cards
+        col1, col2, col3, col4, col5 = st.columns(5)
+        net_total = stats.get('intransit', 0) + stats.get('delivered', 0) + stats.get('rto', 0) + stats.get('undelivered', 0)
+        
+        with col1:
+            st.metric("📦 Unshipped", stats.get('unshipped', 0))
+        with col2:
+            pct = stats.get('intransit', 0) / net_total * 100 if net_total > 0 else 0
+            st.metric("🚚 In-Transit", stats.get('intransit', 0), f"{pct:.1f}%")
+        with col3:
+            pct = stats.get('delivered', 0) / net_total * 100 if net_total > 0 else 0
+            st.metric("✅ Delivered", stats.get('delivered', 0), f"{pct:.1f}%")
+        with col4:
+            pct = stats.get('rto', 0) / net_total * 100 if net_total > 0 else 0
+            st.metric("↩️ RTO", stats.get('rto', 0), f"{pct:.1f}%")
+        with col5:
+            pct = stats.get('undelivered', 0) / net_total * 100 if net_total > 0 else 0
+            st.metric("❌ Undelivered", stats.get('undelivered', 0), f"{pct:.1f}%")
+        
+        # Delivery Rate
+        delivery_rate = stats.get('delivered', 0) / net_total * 100 if net_total > 0 else 0
+        st.markdown(f"### 🎯 Net Delivery Rate: **{delivery_rate:.1f}%**")
+        st.progress(delivery_rate / 100)
+        
+        st.markdown("---")
+        st.caption("💡 For detailed analytics with SKU filter and data refresh, go to the **Analytics** page in sidebar.")
+    else:
+        st.warning("⚠️ No analytics data found. Go to the **Analytics** page in sidebar to fetch data from Shiprocket.")
+    
+    st.stop()  # Stop here for Analytics page
+
+if page == "📥 Bulk Download":
+    # === BULK DOWNLOAD PAGE ===
+    st.markdown("### 📥 Bulk AWB Download")
+    st.caption("Download shipping labels for any AWB numbers")
+    st.markdown("---")
+    
+    # AWB input
+    awb_input = st.text_area(
+        "Enter AWB Numbers (one per line)",
+        placeholder="284931134807362\n284931134807363\n284931134807364",
+        height=150
+    )
+    
+    awb_list = [awb.strip() for awb in awb_input.split("\n") if awb.strip()]
+    
+    if awb_list:
+        st.caption(f"📦 {len(awb_list)} AWB(s) detected")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        download_btn = st.button("🚀 Download Labels", type="primary", use_container_width=True, disabled=len(awb_list) == 0)
+    with col2:
+        st.markdown(f"<div style='padding-top: 8px; color: #8b949e;'>Max 100 AWBs</div>", unsafe_allow_html=True)
+    
+    if download_btn and awb_list:
+        # Get token
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(os.path.dirname(SCRIPT_DIR), "shiprocket-credentials.env"))
+            email = os.getenv('SHIPROCKET_EMAIL')
+            password = os.getenv('SHIPROCKET_PASSWORD')
+            
+            if email and password:
+                with st.spinner("🔐 Authenticating..."):
+                    auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=10)
+                    if auth_r.ok:
+                        token = auth_r.json().get("token")
+                        
+                        # Track AWBs
+                        results = []
+                        shipment_ids = []
+                        progress = st.progress(0)
+                        
+                        for i, awb in enumerate(awb_list[:100]):
+                            progress.progress((i + 1) / len(awb_list))
+                            try:
+                                r = requests.get(f"{SHIPROCKET_API}/courier/track/awb/{awb}", headers={"Authorization": f"Bearer {token}"}, timeout=15)
+                                if r.ok:
+                                    data = r.json()
+                                    tracking_data = data.get("tracking_data", {})
+                                    shipment_track = tracking_data.get("shipment_track", [])
+                                    if shipment_track:
+                                        sid = shipment_track[0].get("shipment_id")
+                                        if sid:
+                                            shipment_ids.append(sid)
+                                            results.append({"awb": awb, "success": True, "sid": sid})
+                                        else:
+                                            results.append({"awb": awb, "success": False})
+                                    else:
+                                        results.append({"awb": awb, "success": False})
+                                else:
+                                    results.append({"awb": awb, "success": False})
+                            except:
+                                results.append({"awb": awb, "success": False})
+                        
+                        progress.empty()
+                        
+                        # Show results
+                        success = sum(1 for r in results if r.get("success"))
+                        st.markdown(f"**Found:** {success}/{len(awb_list)} AWBs")
+                        
+                        if shipment_ids:
+                            # Generate labels
+                            with st.spinner("📄 Generating labels..."):
+                                label_r = requests.post(f"{SHIPROCKET_API}/courier/generate/label", headers={"Authorization": f"Bearer {token}"}, json={"shipment_id": shipment_ids}, timeout=30)
+                                if label_r.ok:
+                                    label_url = label_r.json().get("label_url")
+                                    if label_url:
+                                        pdf_r = requests.get(label_url, timeout=30)
+                                        if pdf_r.ok:
+                                            st.success(f"✅ Labels ready! ({len(shipment_ids)} labels)")
+                                            st.download_button(
+                                                "📥 Download PDF",
+                                                data=pdf_r.content,
+                                                file_name=f"labels_bulk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                                mime="application/pdf",
+                                                type="primary",
+                                                use_container_width=True
+                                            )
+                                        else:
+                                            st.error("❌ Failed to download PDF")
+                                else:
+                                    st.error("❌ Failed to generate labels")
+                        else:
+                            st.warning("⚠️ No valid shipments found")
+                    else:
+                        st.error("❌ Authentication failed")
+            else:
+                st.error("❌ Credentials not configured")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
+    
+    st.markdown("---")
+    st.caption("💡 For advanced features, go to the **Bulk Download** page in sidebar.")
+    
+    st.stop()  # Stop here for Bulk Download page
 
 if page == "⚙️ Settings":
     # === SETTINGS PAGE ===

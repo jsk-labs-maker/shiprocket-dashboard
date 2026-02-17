@@ -1,0 +1,16 @@
+{
+  "action": "sync",
+  "schedules": [
+    {
+      "id": "sched-001",
+      "name": "test",
+      "time": "21:30",
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "enabled": true,
+      "cron_job_id": "489379e4-873b-4005-8944-2ecc8be45ce4"
+    }
+  ],
+  "requested_at": "2026-02-17T19:17:04.617354",
+  "completed_at": "2026-02-17T19:29:40.000000",
+  "status": "completed"
+}

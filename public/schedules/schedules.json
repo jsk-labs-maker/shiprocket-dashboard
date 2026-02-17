@@ -2,21 +2,19 @@
   "schedules": [
     {
       "id": "sched-001",
-      "name": "Test ",
-      "time": "19:00",
+      "name": "test",
+      "time": "21:30",
       "days": [
         "Monday",
         "Tuesday",
         "Wednesday",
         "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
+        "Friday"
       ],
       "action": "Ship All Orders",
       "enabled": true,
       "last_run": null
     }
   ],
-  "updated_at": "2026-02-17T18:57:58.703246"
+  "updated_at": "2026-02-17T19:17:23.885753"
 }
