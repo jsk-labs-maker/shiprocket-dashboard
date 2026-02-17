@@ -185,19 +185,33 @@ st.markdown(f"""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# Calculate net total (shipped orders only)
+net_total_for_pct = s_intransit + s_delivered + s_rto + s_undelivered
+
 # 5 Cards
 c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
 
-cards = [
-    (c1, "unshipped", "📦 Unshipped", s_unshipped),
+# Unshipped card (% of total)
+with c1:
+    pct_unshipped = s_unshipped / total * 100 if total > 0 else 0
+    st.markdown(f"""
+    <div class="stat-card unshipped">
+        <div class="stat-value">{s_unshipped}</div>
+        <div class="stat-label">📦 Unshipped</div>
+        <div class="stat-percent">{pct_unshipped:.1f}% of total</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Shipped cards (% of net total - these 4 add up to 100%)
+shipped_cards = [
     (c2, "intransit", "🚚 In-Transit", s_intransit),
     (c3, "delivered", "✅ Delivered", s_delivered),
     (c4, "rto", "↩️ RTO", s_rto),
     (c5, "undelivered", "❌ Undelivered", s_undelivered)
 ]
 
-for col, key, label, count in cards:
-    pct = count / total * 100 if total > 0 else 0
+for col, key, label, count in shipped_cards:
+    pct = count / net_total_for_pct * 100 if net_total_for_pct > 0 else 0
     with col:
         st.markdown(f"""
         <div class="stat-card {key}">
