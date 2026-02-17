@@ -892,6 +892,130 @@ def get_shiprocket_data():
         # Return cached data if API fails
         return cached or {"wallet": 0, "new_orders": 0, "connected": False, "error": str(e)}
 
+def download_latest_batch_labels():
+    """Download labels from latest batch, sort by Courier+SKU, return ZIP."""
+    import zipfile
+    import tempfile
+    import re
+    from io import BytesIO
+    from pypdf import PdfReader, PdfWriter
+    
+    with st.spinner("📥 Downloading and sorting labels..."):
+        try:
+            email, pwd = get_shiprocket_credentials()
+            
+            # Login
+            auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
+            if not auth_r.ok:
+                st.error("❌ Login failed")
+                return
+            
+            token = auth_r.json().get("token")
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            # Get today's shipments (latest batch)
+            today = datetime.now().strftime("%Y-%m-%d")
+            ship_r = requests.get(f"{SHIPROCKET_API}/shipments", headers=headers, params={"per_page": 100}, timeout=30)
+            
+            if not ship_r.ok:
+                st.error("❌ Failed to fetch shipments")
+                return
+            
+            shipments = ship_r.json().get("data", [])
+            today_shipments = [s for s in shipments if s.get("created_at", "")[:10] == today or today in str(s.get("created_at", ""))]
+            
+            if not today_shipments:
+                st.warning("⚠️ No shipments found for today")
+                return
+            
+            st.info(f"📦 Found {len(today_shipments)} shipments from today")
+            
+            # Get shipment IDs
+            shipment_ids = [str(s.get("id")) for s in today_shipments if s.get("id")]
+            
+            # Generate combined label PDF
+            label_r = requests.post(
+                f"{SHIPROCKET_API}/courier/generate/label",
+                headers=headers,
+                json={"shipment_id": shipment_ids},
+                timeout=60
+            )
+            
+            if not label_r.ok:
+                st.error(f"❌ Label generation failed: {label_r.status_code}")
+                return
+            
+            label_url = label_r.json().get("label_url", "")
+            if not label_url:
+                st.error("❌ No label URL returned")
+                return
+            
+            # Download the PDF
+            pdf_r = requests.get(label_url, timeout=60)
+            if not pdf_r.ok:
+                st.error("❌ Failed to download PDF")
+                return
+            
+            # Sort labels by Courier + SKU
+            pdf_data = BytesIO(pdf_r.content)
+            reader = PdfReader(pdf_data)
+            
+            # Group pages by courier
+            courier_pages = {}
+            
+            for i, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                
+                # Extract courier
+                courier = "Unknown"
+                for c in ["Ekart", "Delhivery", "Xpressbees", "BlueDart", "DTDC", "Shadowfax", "Ecom"]:
+                    if c.lower() in text.lower():
+                        courier = c
+                        break
+                
+                # Extract SKU
+                sku_match = re.search(r'SKU[:\s]*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
+                sku = sku_match.group(1) if sku_match else "Unknown"
+                
+                key = f"{courier}_{sku}"
+                if key not in courier_pages:
+                    courier_pages[key] = []
+                courier_pages[key].append(page)
+            
+            # Create ZIP with sorted PDFs
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for key, pages in courier_pages.items():
+                    writer = PdfWriter()
+                    for p in pages:
+                        writer.add_page(p)
+                    
+                    pdf_buffer = BytesIO()
+                    writer.write(pdf_buffer)
+                    pdf_buffer.seek(0)
+                    
+                    filename = f"{today}_{key}.pdf"
+                    zf.writestr(filename, pdf_buffer.read())
+            
+            zip_buffer.seek(0)
+            
+            # Provide download
+            st.download_button(
+                label=f"📥 Download Labels ZIP ({len(courier_pages)} files)",
+                data=zip_buffer.getvalue(),
+                file_name=f"labels_{today}_sorted.zip",
+                mime="application/zip"
+            )
+            
+            st.success(f"✅ Sorted {len(reader.pages)} labels into {len(courier_pages)} groups!")
+            
+            # Show breakdown
+            for key in sorted(courier_pages.keys()):
+                st.caption(f"  • {key}: {len(courier_pages[key])} labels")
+                
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
 # Load all data
 tasks = get_tasks()
 batches = get_batches()
@@ -989,49 +1113,8 @@ with st.sidebar:
             st.cache_data.clear()
             st.rerun()
     with col2:
-        if st.button("📥", help="Download Labels"):
-            # Get latest shipments and download labels
-            try:
-                email, pwd = get_shiprocket_credentials()
-                auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
-                if auth_r.ok:
-                    token = auth_r.json().get("token")
-                    headers = {"Authorization": f"Bearer {token}"}
-                    
-                    # Get recent shipments
-                    ship_r = requests.get(f"{SHIPROCKET_API}/shipments", headers=headers, params={"per_page": 10}, timeout=15)
-                    if ship_r.ok:
-                        shipments = ship_r.json().get("data", [])
-                        if shipments:
-                            # Get shipment IDs for label generation
-                            shipment_ids = [str(s.get("id")) for s in shipments[:5] if s.get("id")]
-                            if shipment_ids:
-                                # Generate labels
-                                label_r = requests.post(
-                                    f"{SHIPROCKET_API}/courier/generate/label",
-                                    headers=headers,
-                                    json={"shipment_id": shipment_ids},
-                                    timeout=30
-                                )
-                                if label_r.ok:
-                                    label_url = label_r.json().get("label_url", "")
-                                    if label_url:
-                                        st.markdown(f"[📥 **Download Labels PDF**]({label_url})")
-                                        st.toast("✅ Labels ready!", icon="📥")
-                                    else:
-                                        st.warning("No label URL returned")
-                                else:
-                                    st.error(f"Label generation failed: {label_r.status_code}")
-                            else:
-                                st.warning("No shipments found")
-                        else:
-                            st.warning("No recent shipments")
-                    else:
-                        st.error("Failed to fetch shipments")
-                else:
-                    st.error("Login failed")
-            except Exception as e:
-                st.error(f"Error: {str(e)[:50]}")
+        if st.button("📥", help="Download Latest Batch Labels (Sorted by Courier+SKU)"):
+            download_latest_batch_labels()
     
     # Connection status
     status_color = "🟢" if sr_data['connected'] else "🔴"
