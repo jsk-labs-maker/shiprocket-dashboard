@@ -118,24 +118,28 @@ button[kind="header"],
     background: linear-gradient(180deg, rgba(31, 111, 235, 0.1) 0%, transparent 100%);
 }
 .avatar { 
-    width: 80px; height: 80px; 
-    background: linear-gradient(135deg, #fbbf24, #f59e0b, #ea580c); 
+    width: 90px; height: 90px; 
+    background: linear-gradient(135deg, #1f6feb, #58a6ff, #a855f7); 
     border-radius: 50%; 
     display: inline-flex; 
     align-items: center; 
     justify-content: center; 
-    font-size: 36px;
+    font-size: 42px;
     position: relative;
-    box-shadow: 0 4px 20px rgba(251, 191, 36, 0.4);
+    box-shadow: 0 4px 25px rgba(88, 166, 255, 0.5);
     animation: pulse 3s ease-in-out infinite;
+    border: 3px solid rgba(255, 255, 255, 0.2);
 }
 .avatar::after {
-    content: "✨";
+    content: "⚡";
     position: absolute;
-    top: -5px;
-    right: -5px;
-    font-size: 18px;
+    top: -8px;
+    right: -8px;
+    font-size: 22px;
     animation: pulse 1.5s ease-in-out infinite;
+    background: #0d1117;
+    border-radius: 50%;
+    padding: 4px;
 }
 .profile-name { 
     color: #e6edf3; 
@@ -728,9 +732,9 @@ with st.sidebar:
     # Profile
     st.markdown("""
     <div class="profile-box">
-        <div class="avatar">😊</div>
+        <div class="avatar">😎</div>
         <div class="profile-name">Kluzo</div>
-        <div class="profile-status"><span class="status-dot"></span> 😎 Ready</div>
+        <div class="profile-status"><span class="status-dot"></span> AI Assistant</div>
     </div>
     """, unsafe_allow_html=True)
     
