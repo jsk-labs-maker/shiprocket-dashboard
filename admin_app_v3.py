@@ -1921,6 +1921,23 @@ with b1:
                         st.rerun()
             
             st.markdown("<hr style='margin:8px 0;border-color:#21262d;'>", unsafe_allow_html=True)
+        
+        # Sync to Automation button
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔄 Sync to Automation", use_container_width=True, type="primary", help="Sync schedules to OpenClaw automation"):
+            # Write sync request file for Kluzo to process
+            sync_file = os.path.join(SCRIPT_DIR, "public", "schedules", "automation_sync.json")
+            sync_data = {
+                "action": "sync",
+                "schedules": local_schedules.get("schedules", []),
+                "requested_at": datetime.now().isoformat(),
+                "status": "pending"
+            }
+            os.makedirs(os.path.dirname(sync_file), exist_ok=True)
+            with open(sync_file, "w") as f:
+                json.dump(sync_data, f, indent=2)
+            st.success("✅ Sync requested! Kluzo will set up automation shortly.")
+            st.toast("🤖 Kluzo will process this on next heartbeat", icon="⏰")
 
 with b2:
     # Build notes HTML in one block with scrollable content
