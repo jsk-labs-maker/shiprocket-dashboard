@@ -9,6 +9,7 @@ import requests
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -17,6 +18,19 @@ st.set_page_config(
     page_icon="📈",
     layout="wide"
 )
+
+# DISABLE auto-refresh on this page (fetching takes time)
+st.markdown("""
+<style>
+/* Override any auto-refresh */
+</style>
+<script>
+// Stop any auto-refresh timers
+if (window.autoRefreshInterval) {
+    clearInterval(window.autoRefreshInterval);
+}
+</script>
+""", unsafe_allow_html=True)
 
 # === CSS ===
 st.markdown("""
@@ -114,14 +128,20 @@ def get_shiprocket_credentials():
     password = os.getenv("SHIPROCKET_PASSWORD", "Kluzo@1212")
     return email, password
 
-def fetch_shiprocket_data(days=30):
-    """Fetch orders from Shiprocket API"""
+def fetch_shiprocket_data(days=30, progress_callback=None):
+    """Fetch orders from Shiprocket API with progress"""
     email, password = get_shiprocket_credentials()
     
     # Login
-    auth = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=30)
-    if not auth.ok:
-        return None, "Login failed"
+    if progress_callback:
+        progress_callback(0, "🔐 Logging in to Shiprocket...")
+    
+    try:
+        auth = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=30)
+        if not auth.ok:
+            return None, "Login failed"
+    except Exception as e:
+        return None, f"Login error: {e}"
     
     token = auth.json().get("token")
     headers = {"Authorization": f"Bearer {token}"}
@@ -130,15 +150,23 @@ def fetch_shiprocket_data(days=30):
     to_date = datetime.now()
     from_date = to_date - timedelta(days=days)
     
-    # Fetch orders
+    if progress_callback:
+        progress_callback(5, f"📅 Fetching orders from {from_date.strftime('%Y-%m-%d')} to {to_date.strftime('%Y-%m-%d')}...")
+    
+    # Fetch orders with progress
     all_orders = []
-    for page in range(1, 100):
+    max_pages = 200  # Handle up to 40,000 orders (200 per page)
+    
+    for page in range(1, max_pages + 1):
         try:
+            if progress_callback:
+                progress_callback(5 + min(page, 80), f"📥 Page {page}... ({len(all_orders)} orders so far)")
+            
             r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={
                 "per_page": 200, "page": page,
                 "from": from_date.strftime("%Y-%m-%d"),
                 "to": to_date.strftime("%Y-%m-%d")
-            }, timeout=60)
+            }, timeout=120)  # Longer timeout for large datasets
             
             if r.ok:
                 orders = r.json().get("data", [])
@@ -147,8 +175,15 @@ def fetch_shiprocket_data(days=30):
                 all_orders.extend(orders)
             else:
                 break
-        except:
+        except requests.exceptions.Timeout:
+            if progress_callback:
+                progress_callback(85, f"⏳ Timeout on page {page}, continuing with {len(all_orders)} orders...")
             break
+        except Exception as e:
+            break
+    
+    if progress_callback:
+        progress_callback(90, f"🔄 Processing {len(all_orders)} orders...")
     
     # Process orders
     rows = []
@@ -172,6 +207,9 @@ def fetch_shiprocket_data(days=30):
                 "AWB": shipment.get("awb", ""),
                 "Courier": shipment.get("courier_name", ""),
             })
+    
+    if progress_callback:
+        progress_callback(100, f"✅ Done! Loaded {len(rows)} order rows")
     
     return pd.DataFrame(rows), None
 
@@ -220,10 +258,18 @@ st.markdown("---")
 # === DATA SOURCE SELECTION ===
 st.markdown("### 📊 Load Data")
 
+# Check if already have cached data
+if "analytics_df" in st.session_state and st.session_state["analytics_df"] is not None:
+    cached_info = st.session_state.get("data_source", "")
+    st.info(f"📁 **Cached data loaded:** {cached_info} ({len(st.session_state['analytics_df'])} rows)")
+    if st.button("🗑️ Clear & Reload", type="secondary"):
+        del st.session_state["analytics_df"]
+        st.rerun()
+
 col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
-    days_option = st.selectbox("📅 Select Period", [30, 60, 90, 180], index=0, format_func=lambda x: f"Last {x} Days")
+    days_option = st.selectbox("📅 Select Period", [30, 60, 90, 180, 365], index=0, format_func=lambda x: f"Last {x} Days")
     fetch_clicked = st.button("🔄 Fetch from Shiprocket", type="primary", use_container_width=True)
 
 with col_btn2:
@@ -235,16 +281,37 @@ df = None
 data_source = None
 
 if fetch_clicked:
-    with st.spinner(f"🔄 Fetching last {days_option} days from Shiprocket..."):
-        df, error = fetch_shiprocket_data(days=days_option)
-        if error:
-            st.error(f"❌ {error}")
-        elif df is not None and len(df) > 0:
-            st.session_state["analytics_df"] = df
-            st.session_state["data_source"] = f"Shiprocket API (Last {days_option} days)"
-            st.success(f"✅ Loaded {len(df)} orders from Shiprocket!")
-        else:
-            st.warning("📭 No orders found for selected period")
+    # Create progress display
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    def update_progress(pct, msg):
+        progress_bar.progress(min(pct, 100))
+        status_text.text(msg)
+    
+    update_progress(0, "🚀 Starting fetch...")
+    
+    df, error = fetch_shiprocket_data(days=days_option, progress_callback=update_progress)
+    
+    if error:
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"❌ {error}")
+    elif df is not None and len(df) > 0:
+        progress_bar.progress(100)
+        status_text.text("✅ Complete!")
+        time.sleep(1)
+        progress_bar.empty()
+        status_text.empty()
+        
+        st.session_state["analytics_df"] = df
+        st.session_state["data_source"] = f"Shiprocket API (Last {days_option} days) - {len(df)} rows"
+        st.success(f"✅ Loaded {len(df)} orders from Shiprocket!")
+        st.rerun()  # Refresh to show data
+    else:
+        progress_bar.empty()
+        status_text.empty()
+        st.warning("📭 No orders found for selected period")
 
 if uploaded_file:
     try:
