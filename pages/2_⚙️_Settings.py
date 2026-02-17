@@ -113,11 +113,7 @@ with settings_col1:
     st.toggle("📱 Push notifications", value=True, help="Receive notifications on your device")
     st.toggle("📧 Email daily summary", value=False, help="Get daily report at 8 PM")
     st.toggle("🚨 Alert on failed orders", value=True, help="Immediate alert when orders fail")
-    st.toggle("💰 Low wallet balance alert", value=True, help="Alert when balance < ₹10,000")
     st.toggle("📦 New order notification", value=False, help="Alert for each new order")
-    
-    wallet_threshold = st.slider("Low balance threshold", 5000, 50000, 10000, step=5000, format="₹%d")
-    st.caption(f"Alert when wallet drops below ₹{wallet_threshold:,}")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Appearance
@@ -143,14 +139,6 @@ with settings_col2:
     st.toggle("📄 Auto-generate manifest", value=True, help="Generate manifest after batch")
     st.toggle("📁 Auto-upload to GitHub", value=True, help="Upload labels to GitHub storage")
     st.toggle("🏷️ Auto-sort labels", value=True, help="Sort by Date → Courier → SKU")
-    
-    st.markdown("**Courier Priority Order:**")
-    courier_priority = st.text_area(
-        "Drag to reorder (one per line)",
-        "Bluedart\nDelhivery\nXpressbees\nEcom Express\nDTDC",
-        height=120,
-        help="Orders will prefer couriers from top to bottom"
-    )
     st.markdown('</div>', unsafe_allow_html=True)
     
     # API Settings
