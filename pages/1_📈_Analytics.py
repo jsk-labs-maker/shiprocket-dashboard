@@ -185,33 +185,42 @@ st.markdown(f"""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Calculate net total (shipped orders only)
-net_total_for_pct = s_intransit + s_delivered + s_rto + s_undelivered
+# Net Total = only COMPLETED orders (Delivered + RTO + Undelivered)
+# Excludes: Unshipped (not processed) and In-Transit (not final)
+net_total = s_delivered + s_rto + s_undelivered
 
 # 5 Cards
 c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
 
-# Unshipped card (% of total)
+# Unshipped card (not part of net total)
 with c1:
-    pct_unshipped = s_unshipped / total * 100 if total > 0 else 0
     st.markdown(f"""
     <div class="stat-card unshipped">
         <div class="stat-value">{s_unshipped}</div>
         <div class="stat-label">📦 Unshipped</div>
-        <div class="stat-percent">{pct_unshipped:.1f}% of total</div>
+        <div class="stat-percent">Not shipped</div>
     </div>
     """, unsafe_allow_html=True)
 
-# Shipped cards (% of net total - these 4 add up to 100%)
-shipped_cards = [
-    (c2, "intransit", "🚚 In-Transit", s_intransit),
+# In-Transit card (not part of net total - still pending)
+with c2:
+    st.markdown(f"""
+    <div class="stat-card intransit">
+        <div class="stat-value">{s_intransit}</div>
+        <div class="stat-label">🚚 In-Transit</div>
+        <div class="stat-percent">Pending</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Completed cards (% of net total - these 3 add up to 100%)
+completed_cards = [
     (c3, "delivered", "✅ Delivered", s_delivered),
     (c4, "rto", "↩️ RTO", s_rto),
     (c5, "undelivered", "❌ Undelivered", s_undelivered)
 ]
 
-for col, key, label, count in shipped_cards:
-    pct = count / net_total_for_pct * 100 if net_total_for_pct > 0 else 0
+for col, key, label, count in completed_cards:
+    pct = count / net_total * 100 if net_total > 0 else 0
     with col:
         st.markdown(f"""
         <div class="stat-card {key}">
@@ -221,9 +230,9 @@ for col, key, label, count in shipped_cards:
         </div>
         """, unsafe_allow_html=True)
 
-# Net Delivery Rate
+# Net Delivery Rate (based on COMPLETED orders only)
 st.markdown("<br>", unsafe_allow_html=True)
-net_total = s_intransit + s_delivered + s_rto + s_undelivered  # Excludes unshipped
+# net_total already defined above: Delivered + RTO + Undelivered (excludes In-Transit)
 net_delivery_rate = (s_delivered / net_total * 100) if net_total > 0 else 0
 
 if net_delivery_rate >= 90:
@@ -237,11 +246,11 @@ else:
 
 st.markdown(f"""
 <div style="background: rgba(22, 27, 34, 0.9); border: 1px solid {rc}; border-radius: 12px; padding: 20px; text-align: center;">
-    <div style="font-size: 0.85rem; color: #8b949e; margin-bottom: 4px;">Net Total Orders (Shipped): <strong style="color: #e6edf3;">{net_total}</strong></div>
+    <div style="font-size: 0.85rem; color: #8b949e; margin-bottom: 4px;">Net Total (Completed): <strong style="color: #e6edf3;">{net_total}</strong></div>
     <div style="font-size: 1rem; color: #8b949e;">Net Delivery %</div>
     <div style="font-size: 3rem; font-weight: 700; color: {rc};">{net_delivery_rate:.1f}%</div>
     <div style="font-size: 1.2rem; color: {rc};">{re} {rt}</div>
-    <div style="font-size: 0.75rem; color: #6e7681; margin-top: 8px;">Delivered ÷ (Total - Unshipped)</div>
+    <div style="font-size: 0.75rem; color: #6e7681; margin-top: 8px;">Delivered ÷ (Delivered + RTO + Undelivered)</div>
 </div>
 """, unsafe_allow_html=True)
 
