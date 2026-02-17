@@ -713,10 +713,64 @@ def get_schedules():
 
 @st.cache_data(ttl=30)
 def get_activity():
+    """Load activity from local file with real-time timestamps."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    activity_file = os.path.join(script_dir, "local_activity.json")
+    
     try:
-        r = requests.get(f"{GITHUB_RAW_BASE}/logs/activity.json", timeout=5)
-        return r.json().get("logs", []) if r.ok else []
-    except: return []
+        if os.path.exists(activity_file):
+            with open(activity_file, "r") as f:
+                activities = json.load(f)
+            
+            # Convert timestamps to "time ago" format
+            now = datetime.now()
+            for a in activities:
+                try:
+                    ts = datetime.fromisoformat(a.get("timestamp", ""))
+                    diff = now - ts
+                    mins = int(diff.total_seconds() / 60)
+                    if mins < 1:
+                        a["time"] = "Just now"
+                    elif mins < 60:
+                        a["time"] = f"{mins} min ago"
+                    elif mins < 1440:
+                        hrs = mins // 60
+                        a["time"] = f"{hrs} hour{'s' if hrs > 1 else ''} ago"
+                    else:
+                        days = mins // 1440
+                        a["time"] = f"{days} day{'s' if days > 1 else ''} ago"
+                except:
+                    a["time"] = "Recently"
+            return activities
+    except:
+        pass
+    return []
+
+def add_activity(text, activity_type="green"):
+    """Add a new activity entry (called by AI during automation)."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    activity_file = os.path.join(script_dir, "local_activity.json")
+    
+    activities = []
+    if os.path.exists(activity_file):
+        try:
+            with open(activity_file, "r") as f:
+                activities = json.load(f)
+        except:
+            pass
+    
+    # Add new activity at the start
+    activities.insert(0, {
+        "text": text,
+        "timestamp": datetime.now().isoformat(),
+        "type": activity_type
+    })
+    
+    # Keep only last 20 activities
+    activities = activities[:20]
+    
+    with open(activity_file, "w") as f:
+        json.dump(activities, f, indent=2)
 
 def get_shiprocket_credentials():
     """Get Shiprocket credentials - Streamlit secrets or hardcoded fallback."""
@@ -1311,22 +1365,20 @@ with col_activity:
     st.markdown('<div class="section-title">⚡ Recent Activity</div>', unsafe_allow_html=True)
     st.markdown('<div class="activity-feed">', unsafe_allow_html=True)
     
-    # Show recent activity
-    activities = [
-        {"text": f"Shipped {today_shipped} orders", "time": "Just now", "type": "green"},
-        {"text": "Pickup scheduled for Delhivery", "time": "15 min ago", "type": "yellow"},
-        {"text": "Labels downloaded and sorted", "time": "20 min ago", "type": "blue"},
-        {"text": "Morning batch completed", "time": "2 hours ago", "type": "green"},
-        {"text": "System health check passed", "time": "3 hours ago", "type": "green"},
-    ]
+    # Load real activity from local file
+    real_activities = get_activity()
     
-    for a in activities[:5]:
+    if not real_activities:
+        # Fallback if no activity yet
+        real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
+    
+    for a in real_activities[:6]:
         st.markdown(f"""
         <div class="activity-item">
-            <span class="activity-dot {a['type']}"></span>
+            <span class="activity-dot {a.get('type', 'blue')}"></span>
             <div class="activity-content">
-                <div class="activity-text">{a['text']}</div>
-                <div class="activity-time">{a['time']}</div>
+                <div class="activity-text">{a.get('text', '')}</div>
+                <div class="activity-time">{a.get('time', '')}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
