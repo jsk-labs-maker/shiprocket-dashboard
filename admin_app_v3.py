@@ -61,6 +61,23 @@ section[data-testid="stSidebar"] > div > div > div > div > ul { display: none !i
 .st-emotion-cache-1cypcdb { display: none !important; }
 [data-testid="stSidebarNavLink"] { display: none !important; }
 
+/* === NAVIGATION TABS (Radio buttons) - WHITE TEXT === */
+[data-testid="stHorizontalBlock"] label,
+[data-testid="stRadio"] label,
+[role="radiogroup"] label,
+div[data-baseweb="radio"] label,
+.stRadio label,
+.stRadio > div > label,
+[data-testid="stWidgetLabel"] p,
+div[data-testid="stRadio"] label p,
+div[data-testid="stRadio"] > div > label > div > p {
+    color: #ffffff !important;
+}
+/* Radio button option text */
+[data-baseweb="radio"] > div:last-child {
+    color: #ffffff !important;
+}
+
 /* === GLASSMORPHISM === */
 .glass {
     background: rgba(22, 27, 34, 0.7) !important;
