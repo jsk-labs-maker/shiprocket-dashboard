@@ -36,7 +36,7 @@ st.markdown("""
     background: rgba(22, 27, 34, 0.9);
     border: 1px solid #30363d;
     border-radius: 12px;
-    padding: 24px;
+    padding: 20px;
     text-align: center;
     transition: all 0.2s ease;
 }
@@ -45,19 +45,23 @@ st.markdown("""
     transform: translateY(-2px);
 }
 .stat-value {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: 700;
     margin-bottom: 4px;
 }
 .stat-label {
     color: #8b949e;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     margin-bottom: 8px;
 }
 .stat-percent {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
 }
+
+.unshipped { border-left: 4px solid #8b949e; }
+.unshipped .stat-value { color: #8b949e; }
+.unshipped .stat-percent { color: #8b949e; }
 
 .intransit { border-left: 4px solid #58a6ff; }
 .intransit .stat-value { color: #58a6ff; }
@@ -149,8 +153,14 @@ def get_orders_by_date_range(token, from_date, to_date):
     return all_orders
 
 def categorize_status(status):
-    """Group Shiprocket statuses into 4 categories"""
+    """Group Shiprocket statuses into 5 categories"""
     status = status.upper() if status else ""
+    
+    # Unshipped orders (not yet dispatched)
+    unshipped_statuses = [
+        "NEW", "INVOICED", "CANCELED", "CANCELLED", 
+        "CANCELLATION REQUESTED", "CANCELLATION_REQUESTED"
+    ]
     
     # In-Transit statuses
     intransit_statuses = [
@@ -168,11 +178,16 @@ def categorize_status(status):
         "RTO_INITIATED", "RTO_INTRANSIT", "RTO_DELIVERED", "RETURNED"
     ]
     
-    # Undelivered / Failed
+    # Undelivered / Failed (after shipping attempt)
     undelivered_statuses = [
         "UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED",
-        "CANCELED", "CANCELLED", "UNDELIVERED_RETURNED"
+        "UNDELIVERED_RETURNED"
     ]
+    
+    # Check unshipped first
+    for s in unshipped_statuses:
+        if s in status or status == s:
+            return "unshipped"
     
     for s in delivered_statuses:
         if s in status:
@@ -194,11 +209,12 @@ def categorize_status(status):
     if "TRANSIT" in status or "PICKUP" in status or "SHIPPED" in status:
         return "intransit"
     
-    return "intransit"  # Default
+    return "unshipped"  # Default to unshipped if unknown
 
 def analyze_sku_performance(orders, selected_sku):
     """Analyze delivery performance for selected SKU"""
     stats = {
+        "unshipped": 0,
         "intransit": 0,
         "delivered": 0,
         "rto": 0,
@@ -300,6 +316,7 @@ if total == 0:
     st.stop()
 
 # Calculate percentages
+pct_unshipped = (stats["unshipped"] / total * 100) if total > 0 else 0
 pct_intransit = (stats["intransit"] / total * 100) if total > 0 else 0
 pct_delivered = (stats["delivered"] / total * 100) if total > 0 else 0
 pct_rto = (stats["rto"] / total * 100) if total > 0 else 0
@@ -316,10 +333,19 @@ st.markdown(f"""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# === 4 STAT CARDS ===
-c1, c2, c3, c4 = st.columns(4, gap="medium")
+# === 5 STAT CARDS ===
+c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
 
 with c1:
+    st.markdown(f"""
+    <div class="stat-card unshipped">
+        <div class="stat-value">{stats["unshipped"]}</div>
+        <div class="stat-label">📦 Unshipped</div>
+        <div class="stat-percent">{pct_unshipped:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c2:
     st.markdown(f"""
     <div class="stat-card intransit">
         <div class="stat-value">{stats["intransit"]}</div>
@@ -328,7 +354,7 @@ with c1:
     </div>
     """, unsafe_allow_html=True)
 
-with c2:
+with c3:
     st.markdown(f"""
     <div class="stat-card delivered">
         <div class="stat-value">{stats["delivered"]}</div>
@@ -337,7 +363,7 @@ with c2:
     </div>
     """, unsafe_allow_html=True)
 
-with c3:
+with c4:
     st.markdown(f"""
     <div class="stat-card rto">
         <div class="stat-value">{stats["rto"]}</div>
@@ -346,7 +372,7 @@ with c3:
     </div>
     """, unsafe_allow_html=True)
 
-with c4:
+with c5:
     st.markdown(f"""
     <div class="stat-card undelivered">
         <div class="stat-value">{stats["undelivered"]}</div>
@@ -357,7 +383,10 @@ with c4:
 
 # === DELIVERY SUCCESS RATE ===
 st.markdown("<br>", unsafe_allow_html=True)
-delivery_rate = pct_delivered
+
+# Calculate delivery rate from shipped orders only (excluding unshipped)
+shipped_total = stats["intransit"] + stats["delivered"] + stats["rto"] + stats["undelivered"]
+delivery_rate = (stats["delivered"] / shipped_total * 100) if shipped_total > 0 else 0
 
 if delivery_rate >= 90:
     rate_color = "#3fb950"
@@ -378,9 +407,10 @@ else:
 
 st.markdown(f"""
 <div style="background: rgba(22, 27, 34, 0.9); border: 1px solid {rate_color}; border-radius: 12px; padding: 20px; text-align: center;">
-    <div style="font-size: 1rem; color: #8b949e;">Delivery Success Rate</div>
+    <div style="font-size: 1rem; color: #8b949e;">Delivery Success Rate (from shipped orders)</div>
     <div style="font-size: 3rem; font-weight: 700; color: {rate_color};">{delivery_rate:.1f}%</div>
     <div style="font-size: 1.2rem; color: {rate_color};">{rate_emoji} {rate_text}</div>
+    <div style="font-size: 0.85rem; color: #8b949e; margin-top: 8px;">Based on {shipped_total} shipped orders</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -391,13 +421,13 @@ st.markdown("### 📋 Order Details")
 # Filter options
 filter_category = st.selectbox(
     "Filter by Status",
-    ["All", "In-Transit", "Delivered", "RTO", "Undelivered"],
+    ["All", "Unshipped", "In-Transit", "Delivered", "RTO", "Undelivered"],
     index=0
 )
 
 # Filter order details
 if filter_category != "All":
-    category_map = {"In-Transit": "intransit", "Delivered": "delivered", "RTO": "rto", "Undelivered": "undelivered"}
+    category_map = {"Unshipped": "unshipped", "In-Transit": "intransit", "Delivered": "delivered", "RTO": "rto", "Undelivered": "undelivered"}
     filtered_details = [o for o in order_details if o["category"] == category_map[filter_category]]
 else:
     filtered_details = order_details
