@@ -1731,6 +1731,30 @@ with c2:
 
 with c3:
     st.markdown(build_kanban_column("done", "DONE", kanban_done, "green", "No completed tasks"), unsafe_allow_html=True)
+    
+    # Delete buttons for completed tasks
+    if kanban_done:
+        with st.expander("🗑️ Delete completed tasks", expanded=False):
+            for task in kanban_done[:10]:
+                task_id = task.get("id")
+                task_title = task.get("title", "Task")[:30]
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.caption(f"• {task_title}")
+                with col_b:
+                    if st.button("❌", key=f"del_{task_id}", help=f"Delete"):
+                        # Delete task from local_tasks.json
+                        try:
+                            tasks_file = os.path.join(SCRIPT_DIR, "local_tasks.json")
+                            with open(tasks_file, "r") as f:
+                                all_tasks = json.load(f)
+                            all_tasks = [t for t in all_tasks if t.get("id") != task_id]
+                            with open(tasks_file, "w") as f:
+                                json.dump(all_tasks, f, indent=2)
+                            st.success(f"Deleted!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Delete failed: {e}")
 
 # === ACTIVITY + DOWNLOADS SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
