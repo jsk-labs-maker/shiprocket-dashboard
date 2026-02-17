@@ -44,12 +44,15 @@ st.markdown("""
 }
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
-/* === SIDEBAR - Hidden === */
-[data-testid="stSidebar"] { display: none !important; }
+/* === SIDEBAR - Always Visible === */
+[data-testid="stSidebar"] { 
+    background: linear-gradient(180deg, #0a0e14 0%, #111820 100%) !important;
+    min-width: 280px !important;
+    border-right: 1px solid #21262d;
+}
 [data-testid="collapsedControl"], 
 button[kind="header"],
 [data-testid="stSidebarCollapseButton"] { display: none !important; }
-section[data-testid="stSidebar"] { display: none !important; }
 
 /* === GLASSMORPHISM === */
 .glass {
