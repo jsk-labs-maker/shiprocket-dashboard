@@ -115,18 +115,6 @@ with settings_col1:
     st.toggle("🚨 Alert on failed orders", value=True, help="Immediate alert when orders fail")
     st.toggle("📦 New order notification", value=False, help="Alert for each new order")
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Appearance
-    st.markdown('<div class="settings-card">', unsafe_allow_html=True)
-    st.markdown("### 🎨 Appearance")
-    st.markdown('<p class="settings-desc">Customize the look and feel</p>', unsafe_allow_html=True)
-    
-    theme = st.selectbox("Theme", ["🌙 Dark (Default)", "☀️ Light", "💻 System"])
-    accent = st.selectbox("Accent Color", ["💙 Blue", "💜 Purple", "💚 Green", "🧡 Orange", "💗 Pink"])
-    st.toggle("✨ Enable animations", value=True)
-    st.toggle("🔄 Auto-refresh dashboard", value=True)
-    refresh_interval = st.slider("Refresh interval", 30, 300, 60, step=30, format="%d sec")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with settings_col2:
     # Automation
