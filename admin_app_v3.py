@@ -658,6 +658,19 @@ def get_tasks():
 
 @st.cache_data(ttl=30)
 def get_batches():
+    """Load batches from local file first, fallback to GitHub."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    local_file = os.path.join(script_dir, "public", "batches_history.json")
+    
+    # Try local file first (faster, real-time)
+    if os.path.exists(local_file):
+        try:
+            with open(local_file, "r") as f:
+                return json.load(f).get("batches", [])
+        except:
+            pass
+    
+    # Fallback to GitHub
     try:
         r = requests.get(f"{GITHUB_RAW_BASE}/batches_history.json", timeout=10)
         return r.json().get("batches", []) if r.ok else []
