@@ -1,32 +1,29 @@
 {
   "schedules": [
     {
-      "id": "sched-001",
+      "id": "morning_batch",
       "name": "Morning Batch",
       "time": "09:00",
-      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-      "action": "Ship All Orders",
-      "enabled": true,
-      "last_run": "2026-02-16T09:00:00"
+      "days": ["Monday", "Tuesday", "Wednesday"],
+      "active": true,
+      "description": "First batch of the day"
     },
     {
-      "id": "sched-002",
+      "id": "afternoon_batch",
       "name": "Afternoon Batch",
       "time": "14:00",
-      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      "action": "Ship All Orders",
-      "enabled": true,
-      "last_run": "2026-02-16T14:00:00"
+      "days": ["Monday", "Tuesday", "Wednesday"],
+      "active": true,
+      "description": "Mid-day batch"
     },
     {
-      "id": "sched-003",
+      "id": "evening_batch",
       "name": "Evening Batch",
       "time": "18:00",
-      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      "action": "Ship All Orders",
-      "enabled": true,
-      "last_run": "2026-02-16T18:00:00"
+      "days": ["Monday", "Tuesday", "Wednesday"],
+      "active": true,
+      "description": "Final batch of the day"
     }
   ],
-  "updated_at": "2026-02-16T23:20:00"
+  "updated_at": "2026-02-17T18:00:00Z"
 }
