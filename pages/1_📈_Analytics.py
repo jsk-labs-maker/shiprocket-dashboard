@@ -1,36 +1,20 @@
 """
 📈 Analytics Page - SKU Delivery Performance
-Auto-fetch from Shiprocket or upload export file
+Uses pre-processed data for instant loading
 """
 
 import streamlit as st
 import pandas as pd
-import requests
-from datetime import datetime, timedelta
+import json
 import os
-from dotenv import load_dotenv
-import time
-
-load_dotenv()
+import subprocess
+from datetime import datetime, timedelta
 
 st.set_page_config(
     page_title="Analytics | Kluzo",
     page_icon="📈",
     layout="wide"
 )
-
-# DISABLE auto-refresh on this page (fetching takes time)
-st.markdown("""
-<style>
-/* Override any auto-refresh */
-</style>
-<script>
-// Stop any auto-refresh timers
-if (window.autoRefreshInterval) {
-    clearInterval(window.autoRefreshInterval);
-}
-</script>
-""", unsafe_allow_html=True)
 
 # === CSS ===
 st.markdown("""
@@ -53,46 +37,26 @@ st.markdown("""
     border-radius: 12px;
     padding: 20px;
     text-align: center;
-    transition: all 0.2s ease;
 }
-.stat-card:hover {
-    border-color: #58a6ff;
-    transform: translateY(-2px);
-}
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-.stat-label {
-    color: #8b949e;
-    font-size: 0.85rem;
-    margin-bottom: 8px;
-}
-.stat-percent {
-    font-size: 1rem;
-    font-weight: 600;
-}
+.stat-card:hover { border-color: #58a6ff; }
+.stat-value { font-size: 2rem; font-weight: 700; margin-bottom: 4px; }
+.stat-label { color: #8b949e; font-size: 0.85rem; margin-bottom: 8px; }
+.stat-percent { font-size: 1rem; font-weight: 600; }
 
 .unshipped { border-left: 4px solid #8b949e; }
-.unshipped .stat-value { color: #8b949e; }
-.unshipped .stat-percent { color: #8b949e; }
+.unshipped .stat-value, .unshipped .stat-percent { color: #8b949e; }
 
 .intransit { border-left: 4px solid #58a6ff; }
-.intransit .stat-value { color: #58a6ff; }
-.intransit .stat-percent { color: #58a6ff; }
+.intransit .stat-value, .intransit .stat-percent { color: #58a6ff; }
 
 .delivered { border-left: 4px solid #3fb950; }
-.delivered .stat-value { color: #3fb950; }
-.delivered .stat-percent { color: #3fb950; }
+.delivered .stat-value, .delivered .stat-percent { color: #3fb950; }
 
 .rto { border-left: 4px solid #f85149; }
-.rto .stat-value { color: #f85149; }
-.rto .stat-percent { color: #f85149; }
+.rto .stat-value, .rto .stat-percent { color: #f85149; }
 
 .undelivered { border-left: 4px solid #f0883e; }
-.undelivered .stat-value { color: #f0883e; }
-.undelivered .stat-percent { color: #f0883e; }
+.undelivered .stat-value, .undelivered .stat-percent { color: #f0883e; }
 
 .total-card {
     background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(139, 92, 246, 0.1));
@@ -104,374 +68,110 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# === SHIPROCKET CONFIG ===
-SHIPROCKET_API = "https://apiv2.shiprocket.in/v1/external"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
+CSV_FILE = os.path.join(DATA_DIR, "analytics_data.csv")
+STATS_FILE = os.path.join(DATA_DIR, "analytics_stats.json")
 
-STATUS_MAP = {
-    1: "AWB Assigned", 2: "Label Generated", 3: "Pickup Scheduled", 4: "Pickup Queued",
-    5: "Manifest Generated", 6: "Shipped", 7: "Delivered", 8: "Cancelled",
-    9: "RTO Initiated", 10: "RTO Delivered", 11: "Pending", 12: "Lost",
-    13: "Pickup Error", 14: "RTO Acknowledged", 15: "Pickup Rescheduled",
-    16: "Cancellation Requested", 17: "Out For Delivery", 18: "In Transit",
-    19: "Out For Pickup", 20: "Pickup Exception", 21: "Undelivered", 22: "Delayed",
-    23: "Partial Delivered", 24: "Destroyed", 25: "Damaged", 26: "Fulfilled",
-    27: "Reached At Destination Hub", 28: "Misrouted", 29: "RTO NDR", 30: "RTO OFD",
-    31: "Disposed Off", 32: "Cancelled Before Dispatched", 33: "RTO In Transit",
-    34: "QC Failed", 35: "Reached Warehouse", 36: "Custom Cleared", 37: "In Flight",
-    38: "Handover to Courier", 39: "Shipment Booked", 40: "In Transit To Destination Hub",
-    41: "Contact Customer Care", 42: "Shipment Held", 43: "Self Fulfilled",
-    44: "Disposed Off", 45: "Cancelled By User", 46: "RTO Delivered To Origin", 47: "AWB Not Assigned"
-}
+def load_data():
+    """Load pre-processed data"""
+    if os.path.exists(CSV_FILE) and os.path.exists(STATS_FILE):
+        df = pd.read_csv(CSV_FILE)
+        with open(STATS_FILE, "r") as f:
+            stats = json.load(f)
+        return df, stats
+    return None, None
 
-def get_shiprocket_credentials():
-    email = os.getenv("SHIPROCKET_EMAIL", "openclawd12@gmail.com")
-    password = os.getenv("SHIPROCKET_PASSWORD", "Kluzo@1212")
-    return email, password
-
-def fetch_shiprocket_data(from_date=None, to_date=None, days=30, progress_callback=None):
-    """Fetch orders from Shiprocket API with progress"""
-    email, password = get_shiprocket_credentials()
+def refresh_data(days=30, from_date=None, to_date=None):
+    """Run the fetch script to refresh data"""
+    script_path = os.path.join(os.path.dirname(SCRIPT_DIR), "fetch_analytics.py")
     
-    # Login
-    if progress_callback:
-        progress_callback(0, "🔐 Logging in to Shiprocket...")
+    cmd = ["python", script_path]
+    if from_date and to_date:
+        cmd.extend(["--from-date", from_date, "--to-date", to_date])
+    else:
+        cmd.extend(["--days", str(days)])
     
-    try:
-        auth = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=30)
-        if not auth.ok:
-            return None, "Login failed"
-    except Exception as e:
-        return None, f"Login error: {e}"
-    
-    token = auth.json().get("token")
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    # Date range - use provided dates or fallback to days
-    if from_date is None:
-        from_date = datetime.now() - timedelta(days=days)
-    if to_date is None:
-        to_date = datetime.now()
-    
-    # Convert date to datetime if needed
-    if hasattr(from_date, 'strftime') and not hasattr(from_date, 'hour'):
-        from_date = datetime.combine(from_date, datetime.min.time())
-    if hasattr(to_date, 'strftime') and not hasattr(to_date, 'hour'):
-        to_date = datetime.combine(to_date, datetime.max.time())
-    
-    if progress_callback:
-        progress_callback(5, f"📅 Fetching orders from {from_date.strftime('%Y-%m-%d')} to {to_date.strftime('%Y-%m-%d')}...")
-    
-    # Fetch orders with progress
-    all_orders = []
-    max_pages = 200  # Handle up to 40,000 orders (200 per page)
-    
-    for page in range(1, max_pages + 1):
-        try:
-            if progress_callback:
-                progress_callback(5 + min(page, 80), f"📥 Page {page}... ({len(all_orders)} orders so far)")
-            
-            r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={
-                "per_page": 200, "page": page,
-                "from": from_date.strftime("%Y-%m-%d"),
-                "to": to_date.strftime("%Y-%m-%d")
-            }, timeout=120)  # Longer timeout for large datasets
-            
-            if r.ok:
-                orders = r.json().get("data", [])
-                if not orders:
-                    break
-                all_orders.extend(orders)
-            else:
-                break
-        except requests.exceptions.Timeout:
-            if progress_callback:
-                progress_callback(85, f"⏳ Timeout on page {page}, continuing with {len(all_orders)} orders...")
-            break
-        except Exception as e:
-            break
-    
-    if progress_callback:
-        progress_callback(90, f"🔄 Processing {len(all_orders)} orders...")
-    
-    # Process orders
-    rows = []
-    for order in all_orders:
-        shipments = order.get("shipments", [])
-        shipment = shipments[0] if shipments else {}
-        
-        status_raw = shipment.get("status", order.get("status", ""))
-        if isinstance(status_raw, int):
-            status = STATUS_MAP.get(status_raw, f"Status {status_raw}")
-        else:
-            status = str(status_raw) if status_raw else "Unknown"
-        
-        for product in order.get("products", [{}]):
-            rows.append({
-                "Order ID": order.get("channel_order_id", order.get("id", "")),
-                "Created At": order.get("created_at", "")[:10] if order.get("created_at") else "",
-                "Status": status,
-                "SKU": product.get("sku", ""),
-                "Product Name": product.get("name", ""),
-                "AWB": shipment.get("awb", ""),
-                "Courier": shipment.get("courier_name", ""),
-            })
-    
-    if progress_callback:
-        progress_callback(100, f"✅ Done! Loaded {len(rows)} order rows")
-    
-    return pd.DataFrame(rows), None
-
-def categorize_status(status):
-    """Group statuses into 5 categories"""
-    status = str(status).upper().strip() if status else ""
-    
-    unshipped = ["NEW", "INVOICED", "CANCELLED", "CANCELED", "CANCELLATION REQUESTED", "PENDING PAYMENT", "PROCESSING", "CANCELLED BY USER", "CANCELLED BEFORE DISPATCHED"]
-    intransit = ["DELIVERY DELAYED", "IN TRANSIT", "MISROUTED", "OUT FOR DELIVERY", "PICKED UP", "REACHED AT DESTINATION HUB", "REACHED DESTINATION HUB"]
-    delivered = ["DELIVERED", "COMPLETE", "COMPLETED", "PARTIAL DELIVERED", "SELF FULFILLED", "FULFILLED"]
-    rto = ["RTO INITIATED", "RTO IN TRANSIT", "RTO DELIVERED", "RTO", "RETURNED", "RTO NDR", "RTO OFD", "RTO ACKNOWLEDGED", "RTO DELIVERED TO ORIGIN"]
-    undelivered = ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED", "DISPOSED OFF", "QC FAILED", "PICKUP ERROR", "PICKUP EXCEPTION", "CONTACT CUSTOMER CARE"]
-    
-    # IMPORTANT: Check RTO FIRST (before delivered) because "RTO DELIVERED" contains "DELIVERED"
-    # Check for RTO first
-    if "RTO" in status or "RETURN" in status:
-        return "rto"
-    
-    for s in rto:
-        if s in status:
-            return "rto"
-    
-    # Then check unshipped
-    for s in unshipped:
-        if s in status:
-            return "unshipped"
-    
-    if "CANCEL" in status:
-        return "unshipped"
-    
-    # Then check undelivered
-    for s in undelivered:
-        if s in status:
-            return "undelivered"
-    
-    # Then check delivered (after RTO is already filtered out)
-    for s in delivered:
-        if s in status:
-            return "delivered"
-    
-    if "DELIVER" in status:
-        return "delivered"
-    
-    # Then check intransit
-    for s in intransit:
-        if s in status:
-            return "intransit"
-    
-    # Fallback for transit-related keywords (only exact matches now)
-    if status in ["IN TRANSIT", "OUT FOR DELIVERY", "PICKED UP"]:
-        return "intransit"
-    
-    return "unshipped"
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(SCRIPT_DIR))
+    return result.returncode == 0, result.stdout, result.stderr
 
 # === HEADER ===
 st.markdown("# 📈 SKU Delivery Analytics")
-st.caption("Analyze delivery performance by SKU")
+st.caption("Fast analytics with pre-processed data")
 st.markdown("---")
-
-# === DATA SOURCE SELECTION ===
-st.markdown("### 📊 Load Data")
-
-# Check if already have cached data
-if "analytics_df" in st.session_state and st.session_state["analytics_df"] is not None:
-    cached_info = st.session_state.get("data_source", "")
-    st.info(f"📁 **Cached data loaded:** {cached_info} ({len(st.session_state['analytics_df'])} rows)")
-    if st.button("🗑️ Clear & Reload", type="secondary"):
-        del st.session_state["analytics_df"]
-        st.rerun()
-
-col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-
-with col_btn1:
-    date_mode = st.radio("📅 Date Selection", ["Preset", "Custom"], horizontal=True)
-
-with col_btn2:
-    if date_mode == "Preset":
-        days_option = st.selectbox("Period", [30, 60, 90, 180, 365], index=0, format_func=lambda x: f"Last {x} Days")
-        fetch_from = datetime.now() - timedelta(days=days_option)
-        fetch_to = datetime.now()
-    else:
-        fetch_from = st.date_input("From Date", value=datetime.now() - timedelta(days=30))
-
-with col_btn3:
-    if date_mode == "Custom":
-        fetch_to = st.date_input("To Date", value=datetime.now())
-    else:
-        st.markdown("<br>", unsafe_allow_html=True)
-
-# Buttons row
-btn_col1, btn_col2 = st.columns(2)
-with btn_col1:
-    fetch_clicked = st.button("🔄 Fetch from Shiprocket", type="primary", use_container_width=True)
-with btn_col2:
-    uploaded_file = st.file_uploader("📤 Or Upload Export", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
 
 # === LOAD DATA ===
-df = None
-data_source = None
+df, stats = load_data()
 
-if fetch_clicked:
-    # Create progress display
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    def update_progress(pct, msg):
-        progress_bar.progress(min(pct, 100))
-        status_text.text(msg)
-    
-    update_progress(0, "🚀 Starting fetch...")
-    
-    df, error = fetch_shiprocket_data(from_date=fetch_from, to_date=fetch_to, progress_callback=update_progress)
-    
-    if error:
-        progress_bar.empty()
-        status_text.empty()
-        st.error(f"❌ {error}")
-    elif df is not None and len(df) > 0:
-        progress_bar.progress(100)
-        status_text.text("✅ Complete!")
-        time.sleep(1)
-        progress_bar.empty()
-        status_text.empty()
-        
-        # Format date range for display
-        from_str = fetch_from.strftime('%Y-%m-%d') if hasattr(fetch_from, 'strftime') else str(fetch_from)
-        to_str = fetch_to.strftime('%Y-%m-%d') if hasattr(fetch_to, 'strftime') else str(fetch_to)
-        
-        st.session_state["analytics_df"] = df
-        st.session_state["data_source"] = f"Shiprocket API ({from_str} to {to_str}) - {len(df)} rows"
-        st.success(f"✅ Loaded {len(df)} orders from Shiprocket!")
-        st.rerun()  # Refresh to show data
-    else:
-        progress_bar.empty()
-        status_text.empty()
-        st.warning("📭 No orders found for selected period")
+# === REFRESH CONTROLS ===
+st.markdown("### 🔄 Data Controls")
 
-if uploaded_file:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        st.session_state["analytics_df"] = df
-        st.session_state["data_source"] = f"Uploaded: {uploaded_file.name}"
-        st.success(f"✅ Loaded {len(df)} rows from {uploaded_file.name}")
-    except Exception as e:
-        st.error(f"❌ Error reading file: {e}")
-
-# Use session state data
-if "analytics_df" in st.session_state:
-    df = st.session_state["analytics_df"]
-    data_source = st.session_state.get("data_source", "")
-
-if df is None or len(df) == 0:
-    st.info("👆 Click **Fetch from Shiprocket** or upload an export file to get started")
-    st.stop()
-
-st.markdown(f"📁 **Data Source:** {data_source}")
-st.markdown("---")
-
-# === PROCESS DATA ===
-# Find columns
-def find_col(possible):
-    for p in possible:
-        for c in df.columns:
-            if p.lower() in c.lower():
-                return c
-    return None
-
-sku_col = find_col(["sku", "product sku", "item sku"])
-status_col = find_col(["status", "order status", "shipment status"])
-date_col = find_col(["created", "date", "order date"])
-order_col = find_col(["order id", "channel order"])
-awb_col = find_col(["awb", "tracking"])
-courier_col = find_col(["courier", "shipping provider"])
-
-if not status_col:
-    st.error("❌ Could not find Status column")
-    st.write("Available columns:", list(df.columns))
-    st.stop()
-
-# Process rows
-processed = []
-all_skus = set()
-
-for _, row in df.iterrows():
-    sku = str(row[sku_col]).strip() if sku_col and pd.notna(row.get(sku_col)) else "Unknown"
-    status = str(row[status_col]).strip() if pd.notna(row.get(status_col)) else ""
-    date_val = str(row[date_col])[:10] if date_col and pd.notna(row.get(date_col)) else ""
-    order_id = str(row[order_col]) if order_col and pd.notna(row.get(order_col)) else ""
-    awb = str(row[awb_col]) if awb_col and pd.notna(row.get(awb_col)) else ""
-    courier = str(row[courier_col]) if courier_col and pd.notna(row.get(courier_col)) else ""
-    
-    category = categorize_status(status)
-    
-    if sku and sku != "Unknown" and sku != "nan":
-        all_skus.add(sku)
-    
-    processed.append({
-        "order_id": order_id, "sku": sku, "status": status,
-        "category": category, "date": date_val, "awb": awb, "courier": courier
-    })
-
-# === FILTERS ===
-col1, col2, col3 = st.columns([2, 1, 1])
+col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
 with col1:
-    sku_options = ["ALL"] + sorted(list(all_skus))
-    selected_sku = st.selectbox("🔍 Select SKU", sku_options, index=0)
-
-# Date range
-dates = [p["date"] for p in processed if p["date"] and len(p["date"]) >= 10]
-if dates:
-    try:
-        date_objs = [datetime.strptime(d[:10], "%Y-%m-%d") for d in dates]
-        min_date, max_date = min(date_objs).date(), max(date_objs).date()
-    except:
-        min_date = max_date = datetime.now().date()
-else:
-    min_date = max_date = datetime.now().date()
+    date_mode = st.radio("Mode", ["Preset", "Custom"], horizontal=True)
 
 with col2:
-    from_date = st.date_input("📅 From", value=min_date)
+    if date_mode == "Preset":
+        days = st.selectbox("Period", [30, 60, 90, 180, 365], format_func=lambda x: f"Last {x} Days")
+    else:
+        from_date = st.date_input("From", value=datetime.now() - timedelta(days=30))
+
 with col3:
-    to_date = st.date_input("📅 To", value=max_date)
+    if date_mode == "Custom":
+        to_date = st.date_input("To", value=datetime.now())
+    else:
+        st.write("")
+
+with col4:
+    st.write("")
+    if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
+        with st.spinner("⏳ Fetching data from Shiprocket..."):
+            if date_mode == "Preset":
+                success, stdout, stderr = refresh_data(days=days)
+            else:
+                success, stdout, stderr = refresh_data(
+                    from_date=from_date.strftime("%Y-%m-%d"),
+                    to_date=to_date.strftime("%Y-%m-%d")
+                )
+            
+            if success:
+                st.success("✅ Data refreshed!")
+                st.rerun()
+            else:
+                st.error(f"❌ Error: {stderr}")
+
+# Show data info
+if stats:
+    st.info(f"📁 **Data loaded:** {stats.get('from_date', 'N/A')} to {stats.get('to_date', 'N/A')} • {stats.get('total', 0)} orders • Updated {stats.get('updated_at', 'N/A')[:16]}")
+else:
+    st.warning("⚠️ No data found. Click **Refresh Data** to fetch from Shiprocket.")
+    st.stop()
 
 st.markdown("---")
 
-# === FILTER DATA ===
-filtered = []
-for item in processed:
-    if selected_sku != "ALL" and item["sku"] != selected_sku:
-        continue
-    if item["date"]:
-        try:
-            item_date = datetime.strptime(item["date"][:10], "%Y-%m-%d").date()
-            if item_date < from_date or item_date > to_date:
-                continue
-        except:
-            pass
-    filtered.append(item)
+# === SKU FILTER ===
+all_skus = ["ALL"] + sorted(df["sku"].dropna().unique().tolist()) if df is not None else ["ALL"]
+selected_sku = st.selectbox("🔍 Select SKU", all_skus)
 
-# === STATS ===
-stats = {"unshipped": 0, "intransit": 0, "delivered": 0, "rto": 0, "undelivered": 0}
-for item in filtered:
-    stats[item["category"]] += 1
+# Filter data
+if selected_sku != "ALL":
+    filtered_df = df[df["sku"] == selected_sku]
+else:
+    filtered_df = df
 
-total = len(filtered)
+# === CALCULATE STATS ===
+total = len(filtered_df)
 if total == 0:
-    st.warning("📭 No orders found for selected filters")
+    st.warning("📭 No data for selected SKU")
     st.stop()
 
-pct = {k: (v / total * 100) for k, v in stats.items()}
+cat_counts = filtered_df["category"].value_counts().to_dict()
+s_unshipped = cat_counts.get("unshipped", 0)
+s_intransit = cat_counts.get("intransit", 0)
+s_delivered = cat_counts.get("delivered", 0)
+s_rto = cat_counts.get("rto", 0)
+s_undelivered = cat_counts.get("undelivered", 0)
 
 # === DISPLAY ===
 sku_display = selected_sku if selected_sku != "ALL" else "All SKUs"
@@ -479,7 +179,7 @@ st.markdown(f"""
 <div class="total-card">
     <div style="font-size: 1rem; color: #8b949e;">Total Orders for <strong>{sku_display}</strong></div>
     <div style="font-size: 3rem; font-weight: 700; color: #e6edf3;">{total}</div>
-    <div style="color: #8b949e; font-size: 0.9rem;">{from_date.strftime('%b %d, %Y')} — {to_date.strftime('%b %d, %Y')}</div>
+    <div style="color: #8b949e; font-size: 0.9rem;">{stats.get('from_date', '')} — {stats.get('to_date', '')}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -487,27 +187,30 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 # 5 Cards
 c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
+
 cards = [
-    (c1, "unshipped", "📦 Unshipped"),
-    (c2, "intransit", "🚚 In-Transit"),
-    (c3, "delivered", "✅ Delivered"),
-    (c4, "rto", "↩️ RTO"),
-    (c5, "undelivered", "❌ Undelivered")
+    (c1, "unshipped", "📦 Unshipped", s_unshipped),
+    (c2, "intransit", "🚚 In-Transit", s_intransit),
+    (c3, "delivered", "✅ Delivered", s_delivered),
+    (c4, "rto", "↩️ RTO", s_rto),
+    (c5, "undelivered", "❌ Undelivered", s_undelivered)
 ]
-for col, key, label in cards:
+
+for col, key, label, count in cards:
+    pct = count / total * 100 if total > 0 else 0
     with col:
         st.markdown(f"""
         <div class="stat-card {key}">
-            <div class="stat-value">{stats[key]}</div>
+            <div class="stat-value">{count}</div>
             <div class="stat-label">{label}</div>
-            <div class="stat-percent">{pct[key]:.1f}%</div>
+            <div class="stat-percent">{pct:.1f}%</div>
         </div>
         """, unsafe_allow_html=True)
 
 # Delivery Rate
 st.markdown("<br>", unsafe_allow_html=True)
-shipped_total = stats["intransit"] + stats["delivered"] + stats["rto"] + stats["undelivered"]
-delivery_rate = (stats["delivered"] / shipped_total * 100) if shipped_total > 0 else 0
+shipped_total = s_intransit + s_delivered + s_rto + s_undelivered
+delivery_rate = (s_delivered / shipped_total * 100) if shipped_total > 0 else 0
 
 if delivery_rate >= 90:
     rc, re, rt = "#3fb950", "🏆", "Excellent"
@@ -526,7 +229,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Table
+# === ORDER TABLE ===
 st.markdown("---")
 st.markdown("### 📋 Order Details")
 
@@ -534,17 +237,19 @@ filter_cat = st.selectbox("Filter", ["All", "Unshipped", "In-Transit", "Delivere
 cat_map = {"Unshipped": "unshipped", "In-Transit": "intransit", "Delivered": "delivered", "RTO": "rto", "Undelivered": "undelivered"}
 
 if filter_cat != "All":
-    table_data = [o for o in filtered if o["category"] == cat_map[filter_cat]]
+    table_df = filtered_df[filtered_df["category"] == cat_map[filter_cat]]
 else:
-    table_data = filtered
+    table_df = filtered_df
 
-if table_data:
-    display_df = pd.DataFrame(table_data)[["order_id", "sku", "date", "status", "awb", "courier"]]
+if len(table_df) > 0:
+    display_df = table_df[["order_id", "sku", "date", "status", "awb", "courier"]].copy()
     display_df.columns = ["Order ID", "SKU", "Date", "Status", "AWB", "Courier"]
     st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
     
     csv = display_df.to_csv(index=False)
     st.download_button("📥 Export to CSV", csv, f"analytics_{selected_sku}.csv", "text/csv", use_container_width=True)
+else:
+    st.info("No orders found")
 
 st.markdown("---")
-st.caption(f"📊 {data_source} • {total} orders • Updated {datetime.now().strftime('%I:%M %p')}")
+st.caption(f"📊 Data from: {stats.get('from_date', '')} to {stats.get('to_date', '')} • {total} orders")
