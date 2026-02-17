@@ -231,28 +231,41 @@ def categorize_status(status):
     rto = ["RTO INITIATED", "RTO IN TRANSIT", "RTO DELIVERED", "RTO", "RETURNED", "RTO NDR", "RTO OFD", "RTO ACKNOWLEDGED", "RTO DELIVERED TO ORIGIN"]
     undelivered = ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED", "DISPOSED OFF", "QC FAILED", "PICKUP ERROR", "PICKUP EXCEPTION", "CONTACT CUSTOMER CARE"]
     
-    for s in unshipped:
-        if s in status:
-            return "unshipped"
-    for s in delivered:
-        if s in status:
-            return "delivered"
+    # IMPORTANT: Check RTO FIRST (before delivered) because "RTO DELIVERED" contains "DELIVERED"
+    # Check for RTO first
+    if "RTO" in status or "RETURN" in status:
+        return "rto"
+    
     for s in rto:
         if s in status:
             return "rto"
+    
+    # Then check unshipped
+    for s in unshipped:
+        if s in status:
+            return "unshipped"
+    
+    if "CANCEL" in status:
+        return "unshipped"
+    
+    # Then check undelivered
     for s in undelivered:
         if s in status:
             return "undelivered"
+    
+    # Then check delivered (after RTO is already filtered out)
+    for s in delivered:
+        if s in status:
+            return "delivered"
+    
+    if "DELIVER" in status:
+        return "delivered"
+    
+    # Then check intransit
     for s in intransit:
         if s in status:
             return "intransit"
     
-    if "CANCEL" in status:
-        return "unshipped"
-    if "RTO" in status or "RETURN" in status:
-        return "rto"
-    if "DELIVER" in status:
-        return "delivered"
     if "TRANSIT" in status or "PICKUP" in status or "SHIP" in status:
         return "intransit"
     
