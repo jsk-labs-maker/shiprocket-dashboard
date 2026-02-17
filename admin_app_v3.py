@@ -687,6 +687,91 @@ div[data-testid="stMetric"] {
 
 
 # === DATA FETCHING ===
+# === DOCUMENT MANAGEMENT ===
+def get_documents():
+    """Load documents list from local file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    index_file = os.path.join(script_dir, "public", "documents", "index.json")
+    
+    if os.path.exists(index_file):
+        try:
+            with open(index_file, "r") as f:
+                data = json.load(f)
+                docs = data.get("documents", [])
+                # Filter out documents older than 7 days
+                cutoff = datetime.now() - timedelta(days=7)
+                fresh_docs = []
+                for d in docs:
+                    try:
+                        doc_date = datetime.fromisoformat(d.get("created_at", ""))
+                        if doc_date >= cutoff:
+                            fresh_docs.append(d)
+                    except:
+                        fresh_docs.append(d)
+                # Save cleaned list if any removed
+                if len(fresh_docs) < len(docs):
+                    save_documents_index(fresh_docs)
+                return fresh_docs
+        except:
+            pass
+    return []
+
+def save_documents_index(documents):
+    """Save documents index to local file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    index_file = os.path.join(script_dir, "public", "documents", "index.json")
+    os.makedirs(os.path.dirname(index_file), exist_ok=True)
+    with open(index_file, "w") as f:
+        json.dump({"documents": documents, "updated_at": datetime.now().isoformat()}, f, indent=2)
+
+def save_document(filename, content, doc_type="labels"):
+    """Save a document to the documents folder and update index."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    docs_dir = os.path.join(script_dir, "public", "documents")
+    os.makedirs(docs_dir, exist_ok=True)
+    
+    # Save file
+    filepath = os.path.join(docs_dir, filename)
+    if isinstance(content, bytes):
+        with open(filepath, "wb") as f:
+            f.write(content)
+    else:
+        with open(filepath, "w") as f:
+            f.write(content)
+    
+    # Update index
+    docs = get_documents()
+    docs.insert(0, {
+        "filename": filename,
+        "type": doc_type,
+        "created_at": datetime.now().isoformat(),
+        "size": len(content)
+    })
+    save_documents_index(docs)
+    return filepath
+
+def delete_old_documents():
+    """Delete documents older than 7 days."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    docs_dir = os.path.join(script_dir, "public", "documents")
+    cutoff = datetime.now() - timedelta(days=7)
+    
+    docs = get_documents()
+    fresh_docs = []
+    for d in docs:
+        try:
+            doc_date = datetime.fromisoformat(d.get("created_at", ""))
+            if doc_date >= cutoff:
+                fresh_docs.append(d)
+            else:
+                # Delete the file
+                filepath = os.path.join(docs_dir, d.get("filename", ""))
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+        except:
+            fresh_docs.append(d)
+    save_documents_index(fresh_docs)
+
 @st.cache_data(ttl=30)
 def get_tasks():
     try:
@@ -998,16 +1083,23 @@ def download_latest_batch_labels():
                     zf.writestr(filename, pdf_buffer.read())
             
             zip_buffer.seek(0)
+            zip_content = zip_buffer.getvalue()
+            
+            # Auto-save to Documents
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+            zip_filename = f"{timestamp}_labels_sorted.zip"
+            save_document(zip_filename, zip_content, doc_type="labels")
             
             # Provide download
             st.download_button(
                 label=f"📥 Download Labels ZIP ({len(courier_pages)} files)",
-                data=zip_buffer.getvalue(),
-                file_name=f"labels_{today}_sorted.zip",
+                data=zip_content,
+                file_name=zip_filename,
                 mime="application/zip"
             )
             
             st.success(f"✅ Sorted {len(reader.pages)} labels into {len(courier_pages)} groups!")
+            st.info(f"📁 Saved to Documents: {zip_filename}")
             
             # Show breakdown
             for key in sorted(courier_pages.keys()):
@@ -1204,9 +1296,7 @@ st.markdown(f"""
         <div class="header-title">Kluzo <span class="online-dot"></span></div>
         <div class="tab-nav">
             <span class="tab active">Dashboard</span>
-            <span class="tab">Analytics</span>
-            <span class="tab">Settings</span>
-            <span class="tab">📥 Bulk Download</span>
+            <span class="tab">📁 Documents</span>
         </div>
     </div>
     <div class="header-right">
@@ -1578,6 +1668,46 @@ with b2:
             if st.button("❌ Cancel", use_container_width=True):
                 st.session_state.show_add_note = False
                 st.rerun()
+
+
+# === DOCUMENTS SECTION ===
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Load documents
+all_documents = get_documents()
+
+# Build documents HTML
+doc_items = ""
+if all_documents:
+    for d in all_documents[:10]:
+        doc_type = d.get("type", "file")
+        icon = "🏷️" if doc_type == "labels" else "📄" if doc_type == "manifest" else "📁"
+        size_kb = d.get("size", 0) / 1024
+        size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
+        created = d.get("created_at", "")[:16].replace("T", " ")
+        doc_items += f'<div class="schedule"><div><div class="sched-name">{icon} {d.get("filename", "Unknown")}</div><div class="sched-meta">{created} • {size_str}</div></div></div>'
+else:
+    doc_items = '<div class="empty-state">No documents yet. Run "Ship them buddy" to generate labels!</div>'
+
+docs_html = f'<div class="section-box"><div class="section-title">📁 Documents (Last 7 Days)</div><div class="section-content">{doc_items}</div></div>'
+st.markdown(docs_html, unsafe_allow_html=True)
+
+# Document download buttons
+if all_documents:
+    doc_cols = st.columns(min(len(all_documents), 4))
+    for i, doc in enumerate(all_documents[:4]):
+        with doc_cols[i]:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            filepath = os.path.join(script_dir, "public", "documents", doc.get("filename", ""))
+            if os.path.exists(filepath):
+                with open(filepath, "rb") as f:
+                    st.download_button(
+                        label=f"📥 {doc.get('filename', '')[:20]}...",
+                        data=f.read(),
+                        file_name=doc.get("filename", "download"),
+                        mime="application/octet-stream",
+                        key=f"doc_dl_{i}"
+                    )
 
 
 # === SHIP NOW HANDLER ===
