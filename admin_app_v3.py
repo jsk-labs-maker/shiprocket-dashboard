@@ -141,6 +141,15 @@ button[kind="header"],
     border-radius: 50%;
     padding: 4px;
 }
+.avatar-img {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 4px 30px rgba(88, 166, 255, 0.6);
+    animation: pulse 3s ease-in-out infinite;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
 .profile-name { 
     color: #e6edf3; 
     font-size: 1.2rem; 
@@ -729,10 +738,21 @@ archive_items = [
 
 # === SIDEBAR ===
 with st.sidebar:
-    # Profile
-    st.markdown("""
+    # Profile with actual Kluzo logo
+    import base64
+    import os
+    
+    logo_path = os.path.join(os.path.dirname(__file__), "assets", "kluzo-logo.jpg")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+        logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" class="avatar-img" alt="Kluzo">'
+    else:
+        logo_html = '<div class="avatar">😎</div>'
+    
+    st.markdown(f"""
     <div class="profile-box">
-        <div class="avatar">😎</div>
+        {logo_html}
         <div class="profile-name">Kluzo</div>
         <div class="profile-status"><span class="status-dot"></span> AI Assistant</div>
     </div>
