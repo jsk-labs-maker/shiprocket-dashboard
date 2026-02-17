@@ -287,86 +287,106 @@ button[kind="header"],
 }
 
 /* === KANBAN === */
+/* Kanban Column Base */
 .kanban-col { 
-    background: rgba(22, 27, 34, 0.6);
-    backdrop-filter: blur(10px);
-    border: 1px solid #21262d; 
     border-radius: 12px; 
     padding: 0; 
-    height: 400px;
+    height: 450px;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
-.kanban-col:hover {
-    border-color: #30363d;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+/* TO DO - Orange */
+.kanban-col.todo {
+    border: 2px solid #f0883e;
+    background: linear-gradient(180deg, rgba(240, 136, 62, 0.15) 0%, rgba(13, 17, 23, 0.95) 100%);
+}
+/* IN PROGRESS - Blue */
+.kanban-col.doing {
+    border: 2px solid #58a6ff;
+    background: linear-gradient(180deg, rgba(88, 166, 255, 0.15) 0%, rgba(13, 17, 23, 0.95) 100%);
+}
+/* DONE - Green */
+.kanban-col.done {
+    border: 2px solid #3fb950;
+    background: linear-gradient(180deg, rgba(63, 185, 80, 0.15) 0%, rgba(13, 17, 23, 0.95) 100%);
+}
+/* ARCHIVE - Gray */
+.kanban-col.archive {
+    border: 2px solid #6e7681;
+    background: linear-gradient(180deg, rgba(110, 118, 129, 0.1) 0%, rgba(13, 17, 23, 0.95) 100%);
 }
 .kanban-tasks {
     flex: 1;
-    padding: 8px;
+    padding: 12px;
     overflow-y: auto;
-    max-height: 320px;
-    min-height: 320px;
 }
 .kanban-header { 
-    padding: 14px 16px; 
-    border-bottom: 1px solid #21262d; 
+    padding: 12px 16px; 
     display: flex; 
-    justify-content: space-between; 
+    justify-content: center; 
     align-items: center;
-    background: rgba(0,0,0,0.2);
-    border-radius: 12px 12px 0 0;
 }
-.kanban-title { 
-    color: #8b949e; 
-    font-size: 0.75rem; 
-    font-weight: 600; 
-    text-transform: uppercase; 
-    letter-spacing: 0.5px; 
-    display: flex; 
-    align-items: center; 
-    gap: 10px; 
+.kanban-header-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
-.k-dot { width: 10px; height: 10px; border-radius: 50%; }
-.k-dot.orange { background: linear-gradient(135deg, #f0883e, #ea580c); box-shadow: 0 0 10px rgba(240, 136, 62, 0.5); }
-.k-dot.blue { background: linear-gradient(135deg, #58a6ff, #1f6feb); box-shadow: 0 0 10px rgba(88, 166, 255, 0.5); }
-.k-dot.green { background: linear-gradient(135deg, #3fb950, #22c55e); box-shadow: 0 0 10px rgba(63, 185, 80, 0.5); }
-.k-dot.gray { background: linear-gradient(135deg, #6e7681, #484f58); }
-.k-add { 
-    color: #6e7681; 
-    border: 1px solid #30363d; 
-    border-radius: 6px; 
-    padding: 4px 10px; 
-    font-size: 0.9rem; 
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-.k-add:hover { color: #58a6ff; border-color: #58a6ff; }
+.kanban-header-pill.todo { background: rgba(240, 136, 62, 0.2); border: 1px solid #f0883e; color: #f0883e; }
+.kanban-header-pill.doing { background: rgba(88, 166, 255, 0.2); border: 1px solid #58a6ff; color: #58a6ff; }
+.kanban-header-pill.done { background: rgba(63, 185, 80, 0.2); border: 1px solid #3fb950; color: #3fb950; }
+.kanban-header-pill.archive { background: rgba(110, 118, 129, 0.2); border: 1px solid #6e7681; color: #8b949e; }
+.k-dot { width: 12px; height: 12px; border-radius: 50%; }
+.k-dot.orange { background: #f0883e; box-shadow: 0 0 8px rgba(240, 136, 62, 0.6); }
+.k-dot.blue { background: #58a6ff; box-shadow: 0 0 8px rgba(88, 166, 255, 0.6); }
+.k-dot.green { background: #3fb950; box-shadow: 0 0 8px rgba(63, 185, 80, 0.6); }
+.k-dot.gray { background: #6e7681; }
 
+/* Task Card */
 .task { 
-    background: rgba(13, 17, 23, 0.8);
-    border: 1px solid #21262d; 
-    border-radius: 8px; 
-    padding: 12px 14px; 
-    margin: 10px 12px; 
+    background: rgba(13, 17, 23, 0.9);
+    border: 1px solid #30363d; 
+    border-radius: 10px; 
+    padding: 14px 16px; 
+    margin-bottom: 10px;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 .task:hover { 
     border-color: #58a6ff; 
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
-.task-content { display: flex; gap: 12px; align-items: flex-start; }
-.t-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
-.t-dot.green { background: #3fb950; }
-.t-dot.orange { background: #f0883e; }
-.t-dot.blue { background: #58a6ff; }
-.t-dot.gray { background: #6e7681; }
-.t-text { color: #e6edf3; font-size: 0.88rem; line-height: 1.5; }
-.t-text.muted { color: #6e7681; }
+.task-left { display: flex; gap: 12px; align-items: center; flex: 1; }
+.task-right { display: flex; gap: 6px; align-items: center; }
+.task-btn {
+    background: rgba(110, 118, 129, 0.3);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+}
+.task-btn:hover { background: rgba(110, 118, 129, 0.5); }
+.task-btn.delete { color: #f85149; }
+.task-btn.delete:hover { background: rgba(248, 81, 73, 0.2); }
+.t-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.t-dot.red { background: #f85149; box-shadow: 0 0 6px rgba(248, 81, 73, 0.5); }
+.t-dot.orange { background: #f0883e; box-shadow: 0 0 6px rgba(240, 136, 62, 0.5); }
+.t-dot.green { background: #3fb950; box-shadow: 0 0 6px rgba(63, 185, 80, 0.5); }
+.t-text { color: #e6edf3; font-size: 0.9rem; line-height: 1.4; }
+.empty-state { color: #6e7681; font-size: 0.85rem; padding: 20px; text-align: center; }
 
 .show-btn { 
     background: linear-gradient(90deg, #1f6feb, #58a6ff);
@@ -1314,87 +1334,106 @@ st.markdown("""
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
 def render_task_card(task, col_key):
-    """Render a task card - double tap × to delete."""
+    """Render a task card with edit/delete buttons."""
     import time
     priority = task.get("priority", "medium")
-    dot = PRIORITY_COLORS.get(priority, "🟡")
-    cat = task.get("category", "other")
-    pri_class = f"pri-{priority}"
     task_id = task.get("id", 0)
-    cat_badge = "📦" if cat == "shiprocket" else "📁"
-    cat_color = "#a78bfa" if cat == "shiprocket" else "#9ca3af"
-    cat_bg = "rgba(147,51,234,0.2)" if cat == "shiprocket" else "rgba(107,114,128,0.2)"
     tap_key = f"tap_{task_id}_{col_key}"
+    
+    # Priority dot color
+    pri_dot = {"high": "red", "medium": "orange", "low": "green"}.get(priority, "orange")
     
     # Check if in "confirm delete" state
     pending_delete = st.session_state.get(tap_key, 0)
     is_pending = (time.time() - pending_delete) < 3 if pending_delete else False
+    card_border = "#f85149" if is_pending else "#30363d"
     
-    # Task card with × button inside
-    card_border = "#ef4444" if is_pending else "#30363d"
-    
-    col1, col2 = st.columns([10, 1])
-    with col1:
-        st.markdown(f"""
-        <div style="background: rgba(15,20,25,0.9); border: 1px solid {card_border}; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; {'animation: pulse 0.5s;' if is_pending else ''}">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="color: #e6edf3; font-size: 0.9rem; font-weight: 500;">{dot} {task.get('title', 'Task')}</div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="background: {cat_bg}; color: {cat_color}; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;">{cat_badge}</span>
-                    <div class="priority-dot {pri_class}"></div>
-                </div>
-            </div>
+    st.markdown(f"""
+    <div class="task" style="border-color: {card_border};">
+        <div class="task-left">
+            <div class="t-dot {pri_dot}"></div>
+            <span class="t-text">{task.get('title', 'Task')}</span>
         </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        btn_label = "✓" if is_pending else "×"
-        if st.button(btn_label, key=f"del_{task_id}_{col_key}", help="Double tap to delete"):
-            if is_pending:
-                # Second tap - delete
-                st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task_id]
-                save_local_tasks(st.session_state.kanban_tasks)
-                st.toast("🗑️ Deleted!", icon="✅")
-                st.session_state[tap_key] = 0
-                st.rerun()
-            else:
-                # First tap - mark pending
-                st.session_state[tap_key] = time.time()
-                st.toast("Tap ✓ to confirm delete", icon="⚠️")
-                st.rerun()
+        <div class="task-right">
+            <span class="task-btn">📁</span>
+            <span class="task-btn delete">●</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Hidden delete button
+    if st.button("×", key=f"del_{task_id}_{col_key}", help="Delete task"):
+        if is_pending:
+            st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task_id]
+            save_local_tasks(st.session_state.kanban_tasks)
+            st.session_state[tap_key] = 0
+            st.rerun()
+        else:
+            st.session_state[tap_key] = time.time()
+            st.toast("Tap again to confirm delete", icon="⚠️")
+            st.rerun()
 
 with c1:
-    st.markdown(f'<div class="kanban-header-custom kanban-todo">🟠 TO DO ({len(kanban_todo)})</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kanban-col todo">
+        <div class="kanban-header">
+            <span class="kanban-header-pill todo"><span class="k-dot orange"></span> TO DO ({len(kanban_todo)})</span>
+        </div>
+        <div class="kanban-tasks">
+    """, unsafe_allow_html=True)
     if kanban_todo:
         for t in kanban_todo:
             render_task_card(t, "todo")
     else:
-        st.caption("✨ No pending tasks")
+        st.markdown('<div class="empty-state">✨ No pending tasks</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 with c2:
-    st.markdown(f'<div class="kanban-header-custom kanban-progress">🔵 IN PROGRESS ({len(kanban_doing)})</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kanban-col doing">
+        <div class="kanban-header">
+            <span class="kanban-header-pill doing"><span class="k-dot blue"></span> IN PROGRESS ({len(kanban_doing)})</span>
+        </div>
+        <div class="kanban-tasks">
+    """, unsafe_allow_html=True)
     if kanban_doing:
         for t in kanban_doing:
             render_task_card(t, "doing")
     else:
-        st.caption("🎯 No tasks in progress")
+        st.markdown('<div class="empty-state">🎯 No tasks in progress</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 with c3:
-    st.markdown(f'<div class="kanban-header-custom kanban-done">🟢 DONE ({len(kanban_done)})</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kanban-col done">
+        <div class="kanban-header">
+            <span class="kanban-header-pill done"><span class="k-dot green"></span> DONE ({len(kanban_done)})</span>
+        </div>
+        <div class="kanban-tasks">
+    """, unsafe_allow_html=True)
     if kanban_done:
         for t in kanban_done:
             render_task_card(t, "done")
     else:
-        st.caption("No completed tasks")
+        st.markdown('<div class="empty-state">No completed tasks</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 with c4:
-    st.markdown(f'<div class="kanban-header-custom kanban-archive">⚫ ARCHIVE ({len(kanban_archive)})</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kanban-col archive">
+        <div class="kanban-header">
+            <span class="kanban-header-pill archive"><span class="k-dot gray"></span> ARCHIVE ({len(kanban_archive)})</span>
+        </div>
+        <div class="kanban-tasks">
+    """, unsafe_allow_html=True)
     if kanban_archive:
         for t in kanban_archive[:5]:
             render_task_card(t, "archive")
         if len(kanban_archive) > 5:
-            st.caption(f"+ {len(kanban_archive) - 5} more archived")
+            st.markdown(f'<div class="empty-state">+ {len(kanban_archive) - 5} more</div>', unsafe_allow_html=True)
     else:
-        st.caption("No archived tasks")
+        st.markdown('<div class="empty-state">No archived tasks</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 
 # === MIDDLE SECTION: Activity + Summary ===
