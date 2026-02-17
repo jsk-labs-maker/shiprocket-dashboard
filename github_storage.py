@@ -238,6 +238,91 @@ def add_note(content: str, note_type: str = "user") -> bool:
     return append_to_list("notes/notes.json", item, "notes", 200)
 
 
+def upload_file(path: str, content: bytes, message: str = None) -> bool:
+    """
+    Upload a binary file to GitHub repository.
+    
+    Args:
+        path: Path relative to public/ (e.g., 'documents/labels.pdf')
+        content: Binary content to upload
+        message: Commit message (optional)
+    
+    Returns:
+        True on success, False on error
+    """
+    token = get_github_token()
+    if not token:
+        print("No GitHub token configured")
+        return False
+    
+    try:
+        file_path = f"public/{path}"
+        url = f"{GITHUB_API_BASE}/repos/{GITHUB_REPO}/contents/{file_path}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # Check if file exists
+        response = requests.get(url, headers=headers, timeout=10)
+        sha = None
+        if response.status_code == 200:
+            sha = response.json().get("sha")
+        
+        # Encode content
+        encoded = base64.b64encode(content).decode()
+        
+        # Upload file
+        payload = {
+            "message": message or f"Upload {path}",
+            "content": encoded,
+            "branch": GITHUB_BRANCH
+        }
+        if sha:
+            payload["sha"] = sha
+        
+        response = requests.put(url, headers=headers, json=payload, timeout=60)
+        
+        return response.status_code in [200, 201]
+        
+    except Exception as e:
+        print(f"Error uploading {path}: {e}")
+        return False
+
+
+def save_document_to_github(filename: str, content: bytes, doc_type: str = "labels") -> bool:
+    """
+    Save a document to GitHub and update the index.
+    
+    Args:
+        filename: Filename to save
+        content: Binary content
+        doc_type: Document type (labels, manifest, cancelled)
+    
+    Returns:
+        True on success
+    """
+    # Upload file
+    if not upload_file(f"documents/{filename}", content, f"Add {filename}"):
+        return False
+    
+    # Update index
+    docs = read_json("documents/index.json").get("documents", [])
+    
+    # Add new document at the beginning
+    docs.insert(0, {
+        "filename": filename,
+        "type": doc_type,
+        "created_at": datetime.now().isoformat(),
+        "size": len(content)
+    })
+    
+    # Keep only last 50 documents
+    docs = docs[:50]
+    
+    return write_json("documents/index.json", {"documents": docs, "updated_at": datetime.now().isoformat()})
+
+
 # Convenience functions for common operations
 def set_idle():
     """Set status to idle."""

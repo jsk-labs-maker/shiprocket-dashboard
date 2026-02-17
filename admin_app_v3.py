@@ -715,32 +715,45 @@ div[data-testid="stMetric"] {
 # === DATA FETCHING ===
 # === DOCUMENT MANAGEMENT ===
 def get_documents():
-    """Load documents list from local file."""
+    """Load documents list from local file OR GitHub (for Streamlit Cloud)."""
     
     index_file = os.path.join(SCRIPT_DIR, "public", "documents", "index.json")
+    docs = []
     
+    # Try local file first
     if os.path.exists(index_file):
         try:
             with open(index_file, "r") as f:
                 data = json.load(f)
                 docs = data.get("documents", [])
-                # Filter out documents older than 7 days
-                cutoff = datetime.now() - timedelta(days=7)
-                fresh_docs = []
-                for d in docs:
-                    try:
-                        doc_date = datetime.fromisoformat(d.get("created_at", ""))
-                        if doc_date >= cutoff:
-                            fresh_docs.append(d)
-                    except:
-                        fresh_docs.append(d)
-                # Save cleaned list if any removed
-                if len(fresh_docs) < len(docs):
-                    save_documents_index(fresh_docs)
-                return fresh_docs
         except:
             pass
-    return []
+    
+    # If no local docs, try GitHub (for Streamlit Cloud)
+    if not docs:
+        try:
+            from github_storage import read_json
+            data = read_json("documents/index.json")
+            docs = data.get("documents", [])
+        except:
+            pass
+    
+    # Filter out documents older than 7 days
+    cutoff = datetime.now() - timedelta(days=7)
+    fresh_docs = []
+    for d in docs:
+        try:
+            doc_date = datetime.fromisoformat(d.get("created_at", ""))
+            if doc_date >= cutoff:
+                fresh_docs.append(d)
+        except:
+            fresh_docs.append(d)
+    
+    # Save cleaned list if any removed
+    if len(fresh_docs) < len(docs):
+        save_documents_index(fresh_docs)
+    
+    return fresh_docs
 
 def save_documents_index(documents):
     """Save documents index to local file."""
@@ -1418,18 +1431,34 @@ if page == "📁 Documents":
                 created = doc.get("created_at", "")[:16].replace("T", " ")
                 st.caption(f"📅 {created} • 💾 {size_str}")
             with col2:
-                
                 filepath = os.path.join(SCRIPT_DIR, "public", "documents", doc.get("filename", ""))
+                file_content = None
+                
+                # Try local file first
                 if os.path.exists(filepath):
                     with open(filepath, "rb") as f:
-                        st.download_button(
-                            label="📥 Download",
-                            data=f.read(),
-                            file_name=doc.get("filename", "download"),
-                            mime="application/octet-stream",
-                            key=f"doc_download_{i}",
-                            use_container_width=True
-                        )
+                        file_content = f.read()
+                else:
+                    # Try GitHub (for Streamlit Cloud)
+                    try:
+                        github_url = f"https://raw.githubusercontent.com/jsk-labs-maker/shiprocket-dashboard/main/public/documents/{doc.get('filename', '')}"
+                        r = requests.get(github_url, timeout=30)
+                        if r.ok:
+                            file_content = r.content
+                    except:
+                        pass
+                
+                if file_content:
+                    st.download_button(
+                        label="📥 Download",
+                        data=file_content,
+                        file_name=doc.get("filename", "download"),
+                        mime="application/octet-stream",
+                        key=f"doc_download_{i}",
+                        use_container_width=True
+                    )
+                else:
+                    st.button("❌ Not Found", key=f"doc_notfound_{i}", disabled=True, use_container_width=True)
             with col3:
                 if st.button("🗑️", key=f"doc_delete_{i}", help="Delete this document"):
                     # Delete document
@@ -2599,11 +2628,17 @@ def ship_orders_dialog():
                         "Cancel Reason": "Duplicate Order (Same Phone)"
                     } for o in cancelled_orders]
                     df = pd.DataFrame(cancel_data)
-                    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-                    cancelled_excel_path = f"/tmp/cancelled_duplicates_{timestamp}.xlsx"
+                    cancel_timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+                    cancelled_excel_path = f"/tmp/cancelled_duplicates_{cancel_timestamp}.xlsx"
                     df.to_excel(cancelled_excel_path, index=False, engine='openpyxl')
-                    # Save to documents folder too
-                    save_document(f"{timestamp}_cancelled_duplicates.xlsx", open(cancelled_excel_path, 'rb').read(), doc_type="cancelled")
+                    # Save to documents folder AND GitHub
+                    excel_content = open(cancelled_excel_path, 'rb').read()
+                    save_document(f"{cancel_timestamp}_cancelled_duplicates.xlsx", excel_content, doc_type="cancelled")
+                    try:
+                        from github_storage import save_document_to_github
+                        save_document_to_github(f"{cancel_timestamp}_cancelled_duplicates.xlsx", excel_content, doc_type="cancelled")
+                    except:
+                        pass
                 except Exception as e:
                     pass
         
@@ -2697,12 +2732,24 @@ def ship_orders_dialog():
                 if manifest_pdf.ok:
                     manifest_content = manifest_pdf.content
         
-        # Step 7: Save documents
+        # Step 7: Save documents (locally AND to GitHub for persistence)
         show_status("💾", "Saving documents...", 95)
+        from github_storage import save_document_to_github
+        
         if zip_content:
             save_document(f"{timestamp}_labels_sorted.zip", zip_content, doc_type="labels")
+            # Also upload to GitHub for persistence on Streamlit Cloud
+            try:
+                save_document_to_github(f"{timestamp}_labels_sorted.zip", zip_content, doc_type="labels")
+            except:
+                pass  # Local save is primary
+        
         if manifest_content:
             save_document(f"{timestamp}_manifest.pdf", manifest_content, doc_type="manifest")
+            try:
+                save_document_to_github(f"{timestamp}_manifest.pdf", manifest_content, doc_type="manifest")
+            except:
+                pass
         
         # Update records
         
