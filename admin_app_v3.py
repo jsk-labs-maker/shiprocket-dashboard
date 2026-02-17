@@ -312,16 +312,16 @@ button[kind="header"],
     border: 2px solid #3fb950;
     background: linear-gradient(180deg, rgba(63, 185, 80, 0.15) 0%, rgba(13, 17, 23, 0.95) 100%);
 }
-/* ARCHIVE - Gray */
-.kanban-col.archive {
-    border: 2px solid #6e7681;
-    background: linear-gradient(180deg, rgba(110, 118, 129, 0.1) 0%, rgba(13, 17, 23, 0.95) 100%);
-}
 .kanban-tasks {
     flex: 1;
     padding: 12px;
     overflow-y: auto;
+    max-height: 380px;
 }
+.kanban-tasks::-webkit-scrollbar { width: 6px; }
+.kanban-tasks::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+.kanban-tasks::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.kanban-tasks::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
 .kanban-header { 
     padding: 12px 16px; 
     display: flex; 
@@ -1345,7 +1345,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-c1, c2, c3, c4 = st.columns(4, gap="small")
+c1, c2, c3 = st.columns(3, gap="medium")
 
 def build_task_html(task):
     """Build HTML for a single task card."""
@@ -1374,9 +1374,6 @@ with c2:
 
 with c3:
     st.markdown(build_kanban_column("done", "DONE", kanban_done, "green", "No completed tasks"), unsafe_allow_html=True)
-
-with c4:
-    st.markdown(build_kanban_column("archive", "ARCHIVE", kanban_archive, "gray", "No archived tasks"), unsafe_allow_html=True)
 
 # === ACTIVITY SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
