@@ -678,30 +678,47 @@ def get_activity():
         return r.json().get("logs", []) if r.ok else []
     except: return []
 
-@st.cache_data(ttl=60)
-def get_shiprocket_data():
+def get_shiprocket_credentials():
+    """Get Shiprocket credentials - Streamlit secrets or hardcoded fallback."""
+    # 1. Try Streamlit secrets (for Streamlit Cloud deployment)
     try:
-        from dotenv import load_dotenv
-        import os
-        load_dotenv("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env")
-        email, pwd = os.getenv('SHIPROCKET_EMAIL'), os.getenv('SHIPROCKET_PASSWORD')
-        if email and pwd:
-            r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
-            if r.ok:
-                token = r.json().get("token")
-                headers = {"Authorization": f"Bearer {token}"}
-                
-                # Get wallet
-                wr = requests.get(f"{SHIPROCKET_API}/account/details/wallet-balance", headers=headers, timeout=10)
-                wallet = float(wr.json().get("data", {}).get("balance_amount", 0)) if wr.ok else 0
-                
-                # Get order counts
-                new_r = requests.get(f"{SHIPROCKET_API}/orders?filter=new&per_page=1", headers=headers, timeout=10)
-                new_count = new_r.json().get("meta", {}).get("pagination", {}).get("total", 0) if new_r.ok else 0
-                
-                return {"wallet": wallet, "new_orders": new_count, "connected": True}
-    except: pass
-    return {"wallet": 0, "new_orders": 0, "connected": False}
+        if "SHIPROCKET_EMAIL" in st.secrets and "SHIPROCKET_PASSWORD" in st.secrets:
+            return st.secrets["SHIPROCKET_EMAIL"], st.secrets["SHIPROCKET_PASSWORD"]
+    except:
+        pass
+    
+    # 2. Fallback: hardcoded for internal use
+    return "openclawd12@gmail.com", "Kluzo@1212"
+
+@st.cache_data(ttl=30)
+def get_shiprocket_data():
+    """Fetch wallet balance and new order count from Shiprocket API."""
+    email, pwd = get_shiprocket_credentials()
+    
+    try:
+        # Login to Shiprocket
+        r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
+        if not r.ok:
+            return {"wallet": 0, "new_orders": 0, "connected": False, "error": f"Login failed: {r.status_code}"}
+        
+        token = r.json().get("token")
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Get wallet balance
+        wr = requests.get(f"{SHIPROCKET_API}/account/details/wallet-balance", headers=headers, timeout=10)
+        wallet = float(wr.json().get("data", {}).get("balance_amount", 0)) if wr.ok else 0
+        
+        # Get actual NEW orders (status=NEW, ready to ship)
+        new_r = requests.get(f"{SHIPROCKET_API}/orders?filter=new&per_page=100", headers=headers, timeout=10)
+        new_count = 0
+        if new_r.ok:
+            orders = new_r.json().get("data", [])
+            # Count only orders with actual status "NEW"
+            new_count = sum(1 for o in orders if o.get("status") == "NEW")
+        
+        return {"wallet": wallet, "new_orders": new_count, "connected": True}
+    except Exception as e:
+        return {"wallet": 0, "new_orders": 0, "connected": False, "error": str(e)}
 
 # Load all data
 tasks = get_tasks()
@@ -772,6 +789,17 @@ with st.sidebar:
         st.session_state.ship_now = True
     
     st.markdown("---")
+    
+    # Debug: Show connection status
+    if sr_data.get('error'):
+        st.error(f"⚠️ {sr_data['error']}")
+    elif not sr_data.get('connected'):
+        st.warning("⚠️ Not connected to Shiprocket")
+    
+    # Refresh button to clear cache
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
     
     # Stats cards
     st.markdown(f"""
