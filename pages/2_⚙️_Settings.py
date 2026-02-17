@@ -75,19 +75,6 @@ st.markdown("""
     font-size: 0.8rem;
     font-weight: 500;
 }
-.danger-zone {
-    background: rgba(248, 81, 73, 0.1);
-    border: 1px solid rgba(248, 81, 73, 0.3);
-    border-radius: 12px;
-    padding: 20px;
-    margin-top: 20px;
-}
-.danger-title {
-    color: #f85149;
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 12px;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -267,29 +254,6 @@ with storage_col2:
     st.metric("📦 Total Batches", "47", "+5 this week")
 with storage_col3:
     st.metric("🕐 Last Backup", "2 hours ago", "Auto-backup enabled")
-
-# === DANGER ZONE ===
-st.markdown("---")
-with st.expander("🚨 Danger Zone", expanded=False):
-    st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-    st.markdown('<div class="danger-title">⚠️ Irreversible Actions</div>', unsafe_allow_html=True)
-    st.warning("These actions cannot be undone. Please proceed with caution.")
-    
-    danger_col1, danger_col2 = st.columns(2, gap="large")
-    
-    with danger_col1:
-        st.markdown("**Reset All Settings**")
-        st.caption("Restore all settings to default values")
-        if st.button("🔄 Reset Settings", type="secondary"):
-            st.toast("Settings reset!", icon="🔄")
-    
-    with danger_col2:
-        st.markdown("**Delete All History**")
-        st.caption("Remove all batch history and logs")
-        if st.button("🗑️ Delete History", type="secondary"):
-            st.toast("This would delete history", icon="⚠️")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # === FOOTER ===
 st.markdown("---")
