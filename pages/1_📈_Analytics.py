@@ -166,7 +166,8 @@ def categorize_status(status):
     intransit_statuses = [
         "PICKUP SCHEDULED", "PICKED UP", "IN TRANSIT", "OUT FOR DELIVERY",
         "SHIPPED", "PICKUP GENERATED", "PICKUP QUEUED", "IN_TRANSIT",
-        "OUT_FOR_DELIVERY", "REACHED DESTINATION HUB", "PENDING"
+        "OUT_FOR_DELIVERY", "REACHED DESTINATION HUB", "REACHED AT DESTINATION HUB",
+        "MISROUTED", "PENDING"
     ]
     
     # Delivered
@@ -175,7 +176,8 @@ def categorize_status(status):
     # RTO (Return to Origin)
     rto_statuses = [
         "RTO INITIATED", "RTO IN TRANSIT", "RTO DELIVERED", "RTO",
-        "RTO_INITIATED", "RTO_INTRANSIT", "RTO_DELIVERED", "RETURNED"
+        "RTO_INITIATED", "RTO_INTRANSIT", "RTO_DELIVERED", "RETURNED",
+        "RTO NDR", "RTO OFD", "RTO_NDR", "RTO_OFD"
     ]
     
     # Undelivered / Failed (after shipping attempt)
