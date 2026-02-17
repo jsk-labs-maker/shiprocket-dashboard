@@ -129,27 +129,57 @@ def get_all_skus(token):
     return sorted(list(skus))
 
 def get_orders_by_date_range(token, from_date, to_date):
-    """Fetch orders within date range"""
+    """Fetch orders within date range with retry logic"""
     headers = {"Authorization": f"Bearer {token}"}
     all_orders = []
+    
+    # Progress indicator
+    progress_text = st.empty()
+    
     try:
-        for page in range(1, 20):  # Up to 20 pages
+        for page in range(1, 50):  # Up to 50 pages
+            progress_text.text(f"📥 Fetching page {page}...")
+            
             params = {
                 "per_page": 200,
                 "page": page,
                 "from": from_date.strftime("%Y-%m-%d"),
                 "to": to_date.strftime("%Y-%m-%d")
             }
-            r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params=params, timeout=30)
-            if r.ok:
-                orders = r.json().get("data", [])
-                if not orders:
-                    break
-                all_orders.extend(orders)
-            else:
-                break
+            
+            # Retry logic
+            for attempt in range(3):
+                try:
+                    r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params=params, timeout=60)
+                    if r.ok:
+                        orders = r.json().get("data", [])
+                        if not orders:
+                            progress_text.empty()
+                            return all_orders
+                        all_orders.extend(orders)
+                        progress_text.text(f"📥 Fetched {len(all_orders)} orders...")
+                        break
+                    else:
+                        progress_text.empty()
+                        return all_orders
+                except requests.exceptions.Timeout:
+                    if attempt < 2:
+                        progress_text.text(f"⏳ Timeout, retrying... ({attempt + 1}/3)")
+                        continue
+                    else:
+                        progress_text.warning(f"⚠️ Timeout after 3 attempts. Showing {len(all_orders)} orders fetched so far.")
+                        return all_orders
+                except Exception as e:
+                    if attempt < 2:
+                        continue
+                    else:
+                        progress_text.empty()
+                        return all_orders
+        
+        progress_text.empty()
     except Exception as e:
-        st.error(f"Error fetching orders: {e}")
+        progress_text.error(f"Error: {e}")
+    
     return all_orders
 
 def categorize_status(status):
