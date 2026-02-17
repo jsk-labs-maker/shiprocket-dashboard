@@ -1369,28 +1369,17 @@ st.markdown("<br>", unsafe_allow_html=True)
 col_activity, col_summary = st.columns([2, 1.5], gap="medium")
 
 with col_activity:
-    st.markdown('<div class="section-title">⚡ Recent Activity</div>', unsafe_allow_html=True)
-    st.markdown('<div class="activity-feed">', unsafe_allow_html=True)
-    
-    # Load real activity from local file
+    # Build activity HTML in one block
     real_activities = get_activity()
-    
     if not real_activities:
-        # Fallback if no activity yet
         real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
     
+    activity_items = ""
     for a in real_activities[:6]:
-        st.markdown(f"""
-        <div class="activity-item">
-            <span class="activity-dot {a.get('type', 'blue')}"></span>
-            <div class="activity-content">
-                <div class="activity-text">{a.get('text', '')}</div>
-                <div class="activity-time">{a.get('time', '')}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="activity-feed">{activity_items}</div></div>'
+    st.markdown(activity_html, unsafe_allow_html=True)
 
 with col_summary:
     st.markdown(f"""
