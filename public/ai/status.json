@@ -1,8 +1,8 @@
 {
-  "status": "idle",
-  "message": "All systems operational. Ready for tasks.",
-  "current_task": null,
-  "progress": 0,
-  "started_at": null,
-  "updated_at": "2026-02-16T23:20:00"
+  "status": "processing",
+  "message": "Starting workflow...",
+  "current_task": "Starting workflow...",
+  "timestamp": "2026-02-17T14:00:16.846943",
+  "updated_at": "2026-02-17T14:00:16.846947",
+  "progress": 10
 }
