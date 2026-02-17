@@ -2445,6 +2445,48 @@ with b2:
 
 
 # === SHIP NOW DIALOG ===
+def find_duplicates_by_phone(orders):
+    """
+    Find duplicate orders by phone number.
+    Keep 1 order per phone, mark rest for cancellation.
+    Returns (orders_to_cancel, orders_to_ship, duplicate_info)
+    """
+    from collections import defaultdict
+    import re
+    
+    phone_groups = defaultdict(list)
+    
+    for order in orders:
+        phone = order.get("customer_phone") or order.get("billing_phone") or ""
+        phone_clean = re.sub(r'\D', '', str(phone))[-10:] if phone else ""
+        
+        if phone_clean:
+            phone_groups[phone_clean].append(order)
+        else:
+            phone_groups[f"no_phone_{order.get('id')}"].append(order)
+    
+    orders_to_cancel = []
+    orders_to_ship = []
+    duplicate_info = []
+    
+    for phone, group in phone_groups.items():
+        if len(group) > 1:
+            group_sorted = sorted(group, key=lambda x: x.get("id", 0))
+            orders_to_ship.append(group_sorted[0])
+            orders_to_cancel.extend(group_sorted[1:])
+            duplicate_info.append({
+                "phone": phone,
+                "customer": group[0].get("customer_name", "Unknown"),
+                "total": len(group),
+                "keep": group_sorted[0].get("id"),
+                "cancel": [o.get("id") for o in group_sorted[1:]]
+            })
+        else:
+            orders_to_ship.extend(group)
+    
+    return orders_to_cancel, orders_to_ship, duplicate_info
+
+
 @st.dialog("🚀 Shipping Orders", width="small")
 def ship_orders_dialog():
     import zipfile
@@ -2452,6 +2494,7 @@ def ship_orders_dialog():
     import time
     from io import BytesIO
     from pypdf import PdfReader, PdfWriter
+    import pandas as pd
     
     # Single status box
     status_box = st.empty()
@@ -2472,7 +2515,7 @@ def ship_orders_dialog():
         email, pwd = get_shiprocket_credentials()
         
         # Step 1: Login
-        show_status("🔐", "Logging in to Shiprocket...", 10)
+        show_status("🔐", "Logging in to Shiprocket...", 5)
         auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=15)
         if not auth_r.ok:
             status_box.empty()
@@ -2482,7 +2525,7 @@ def ship_orders_dialog():
         headers = {"Authorization": f"Bearer {token}"}
         
         # Step 2: Fetch orders
-        show_status("📦", "Fetching NEW orders...", 20)
+        show_status("📦", "Fetching NEW orders...", 10)
         orders_r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={"per_page": 200}, timeout=30)
         orders = orders_r.json().get("data", [])
         new_orders = [o for o in orders if o.get("status") == "NEW"]
@@ -2494,11 +2537,58 @@ def ship_orders_dialog():
             time.sleep(5)
             st.rerun()
         
-        # Step 3: Ship orders
+        # Step 3: Find duplicates (same phone number)
+        show_status("🔍", f"Checking {len(new_orders)} orders for duplicates...", 15)
+        orders_to_cancel, orders_to_ship, duplicate_info = find_duplicates_by_phone(new_orders)
+        
+        cancelled_orders = []
+        cancelled_excel_path = None
+        
+        # Step 4: Cancel duplicate orders
+        if orders_to_cancel:
+            show_status("🚫", f"Cancelling {len(orders_to_cancel)} duplicate orders...", 20)
+            for i, order in enumerate(orders_to_cancel):
+                order_id = order.get("id")
+                try:
+                    cancel_r = requests.post(f"{SHIPROCKET_API}/orders/cancel", headers=headers, json={"ids": [order_id]}, timeout=15)
+                    if cancel_r.ok:
+                        cancelled_orders.append(order)
+                    time.sleep(0.2)
+                except:
+                    pass
+            
+            # Export cancelled orders to Excel
+            if cancelled_orders:
+                show_status("📊", "Exporting cancelled orders to Excel...", 25)
+                try:
+                    cancel_data = [{
+                        "Order ID": o.get("id"),
+                        "Channel Order ID": o.get("channel_order_id"),
+                        "Customer Name": o.get("customer_name"),
+                        "Phone": o.get("customer_phone") or o.get("billing_phone"),
+                        "Email": o.get("customer_email"),
+                        "City": o.get("customer_city"),
+                        "State": o.get("customer_state"),
+                        "Pincode": o.get("customer_pincode"),
+                        "Total": o.get("total"),
+                        "Payment Method": o.get("payment_method"),
+                        "Order Date": o.get("created_at"),
+                        "Cancel Reason": "Duplicate Order (Same Phone)"
+                    } for o in cancelled_orders]
+                    df = pd.DataFrame(cancel_data)
+                    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+                    cancelled_excel_path = f"/tmp/cancelled_duplicates_{timestamp}.xlsx"
+                    df.to_excel(cancelled_excel_path, index=False, engine='openpyxl')
+                    # Save to documents folder too
+                    save_document(f"{timestamp}_cancelled_duplicates.xlsx", open(cancelled_excel_path, 'rb').read(), doc_type="cancelled")
+                except Exception as e:
+                    pass
+        
+        # Step 5: Ship unique orders (1 per phone)
         shipped_ids = []
         shipped_awbs = []
-        for i, order in enumerate(new_orders):
-            show_status("🚚", f"Shipping order {i+1}/{len(new_orders)}...", 30 + int((i+1)/len(new_orders)*20))
+        for i, order in enumerate(orders_to_ship):
+            show_status("🚚", f"Shipping order {i+1}/{len(orders_to_ship)}...", 30 + int((i+1)/len(orders_to_ship)*20))
             try:
                 shipments = order.get("shipments", [])
                 if shipments:
@@ -2594,7 +2684,18 @@ def ship_orders_dialog():
         # Update records
         
         batch_file = os.path.join(SCRIPT_DIR, "public", "batches_history.json")
-        batch_data = {"timestamp": datetime.now().isoformat(), "date": today, "time": datetime.now().strftime("%I:%M %p"), "display_time": datetime.now().strftime("%I:%M %p"), "total_orders": len(new_orders), "shipped": len(shipped_ids), "failed": len(new_orders) - len(shipped_ids), "awbs": shipped_awbs[:10], "source": "ship_orders_now"}
+        batch_data = {
+            "timestamp": datetime.now().isoformat(), 
+            "date": today, 
+            "time": datetime.now().strftime("%I:%M %p"), 
+            "display_time": datetime.now().strftime("%I:%M %p"), 
+            "total_orders": len(new_orders), 
+            "shipped": len(shipped_ids), 
+            "cancelled_duplicates": len(cancelled_orders),
+            "failed": len(orders_to_ship) - len(shipped_ids), 
+            "awbs": shipped_awbs[:10], 
+            "source": "ship_orders_now"
+        }
         with open(batch_file, "r") as f:
             batches_data = json.load(f)
         batches_data["batches"].insert(0, batch_data)
@@ -2603,9 +2704,17 @@ def ship_orders_dialog():
         
         with open(os.path.join(SCRIPT_DIR, "local_activity.json"), "r") as f:
             activities = json.load(f)
+        
+        # Add activity for cancelled orders
+        if cancelled_orders:
+            activities.insert(0, {"text": f"🚫 Cancelled {len(cancelled_orders)} duplicate orders", "timestamp": datetime.now().isoformat(), "type": "orange"})
         activities.insert(0, {"text": f"🚀 Shipped {len(shipped_ids)} orders!", "timestamp": datetime.now().isoformat(), "type": "green"})
+        
         with open(os.path.join(SCRIPT_DIR, "local_activity.json"), "w") as f:
             json.dump(activities[:20], f, indent=2)
+        
+        # Build completion message
+        cancel_msg = f"<div style='color: #f0883e; font-size: 14px; margin-top: 5px;'>🚫 Cancelled {len(cancelled_orders)} duplicates</div>" if cancelled_orders else ""
         
         # Complete!
         progress.progress(100)
@@ -2614,6 +2723,7 @@ def ship_orders_dialog():
                         border-radius: 10px; padding: 20px; text-align: center;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🎉</div>
                 <div style="color: #3fb950; font-size: 18px; font-weight: 600;">Shipped {len(shipped_ids)} orders!</div>
+                {cancel_msg}
                 <div style="color: #888; font-size: 14px; margin-top: 8px;">Redirecting to Downloads...</div>
             </div>
         """, unsafe_allow_html=True)
