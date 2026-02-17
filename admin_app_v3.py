@@ -150,6 +150,13 @@ button[kind="header"],
     animation: pulse 3s ease-in-out infinite;
     border: 3px solid rgba(255, 255, 255, 0.1);
 }
+.header-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    vertical-align: middle;
+}
 .profile-name { 
     color: #e6edf3; 
     font-size: 1.2rem; 
@@ -735,21 +742,23 @@ archive_items = [
     "Investigate document editor 'failed to load' issue"
 ]
 
+# === LOAD KLUZO LOGO ===
+import base64
+import os
+
+logo_b64 = ""
+logo_path = os.path.join(os.path.dirname(__file__), "assets", "kluzo-logo.jpg")
+if os.path.exists(logo_path):
+    with open(logo_path, "rb") as f:
+        logo_b64 = base64.b64encode(f.read()).decode()
+    logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" class="avatar-img" alt="Kluzo">'
+else:
+    logo_html = '<div class="avatar">😎</div>'
+
 
 # === SIDEBAR ===
 with st.sidebar:
     # Profile with actual Kluzo logo
-    import base64
-    import os
-    
-    logo_path = os.path.join(os.path.dirname(__file__), "assets", "kluzo-logo.jpg")
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-        logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" class="avatar-img" alt="Kluzo">'
-    else:
-        logo_html = '<div class="avatar">😎</div>'
-    
     st.markdown(f"""
     <div class="profile-box">
         {logo_html}
@@ -811,7 +820,7 @@ st.markdown(f"""
     <div class="header-right">
         <span>Last sync: {last_sync}</span>
         <span><span class="kbd">?</span> Shortcuts</span>
-        <span>😎</span>
+        <img src="data:image/jpeg;base64,{logo_b64 if 'logo_b64' in dir() else ''}" class="header-logo" alt="K">
     </div>
 </div>
 """, unsafe_allow_html=True)
