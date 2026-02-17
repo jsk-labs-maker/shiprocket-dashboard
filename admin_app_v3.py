@@ -815,6 +815,7 @@ st.markdown(f"""
             <span class="tab active">Dashboard</span>
             <span class="tab">Analytics</span>
             <span class="tab">Settings</span>
+            <span class="tab">📥 Bulk Download</span>
         </div>
     </div>
     <div class="header-right">
