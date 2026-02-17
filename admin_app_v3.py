@@ -1337,42 +1337,20 @@ def build_task_html(task):
     """Build HTML for a single task card."""
     priority = task.get("priority", "medium")
     pri_dot = {"high": "red", "medium": "orange", "low": "green"}.get(priority, "orange")
-    return f"""
-    <div class="task">
-        <div class="task-left">
-            <div class="t-dot {pri_dot}"></div>
-            <span class="t-text">{task.get('title', 'Task')}</span>
-        </div>
-        <div class="task-right">
-            <span class="task-btn">📁</span>
-            <span class="task-btn delete">●</span>
-        </div>
-    </div>
-    """
+    return f'<div class="task"><div class="task-left"><div class="t-dot {pri_dot}"></div><span class="t-text">{task.get("title", "Task")}</span></div><div class="task-right"><span class="task-btn">📁</span><span class="task-btn delete">●</span></div></div>'
 
 def build_kanban_column(col_type, title, tasks, dot_class, empty_msg):
     """Build complete HTML for a kanban column."""
     tasks_html = ""
     if tasks:
-        for t in tasks[:10]:  # Limit to 10 tasks
+        for t in tasks[:10]:
             tasks_html += build_task_html(t)
         if len(tasks) > 10:
             tasks_html += f'<div class="empty-state">+ {len(tasks) - 10} more</div>'
     else:
         tasks_html = f'<div class="empty-state">{empty_msg}</div>'
     
-    return f"""
-    <div class="kanban-col {col_type}">
-        <div class="kanban-header">
-            <span class="kanban-header-pill {col_type}">
-                <span class="k-dot {dot_class}"></span> {title} ({len(tasks)})
-            </span>
-        </div>
-        <div class="kanban-tasks">
-            {tasks_html}
-        </div>
-    </div>
-    """
+    return f'<div class="kanban-col {col_type}"><div class="kanban-header"><span class="kanban-header-pill {col_type}"><span class="k-dot {dot_class}"></span> {title} ({len(tasks)})</span></div><div class="kanban-tasks">{tasks_html}</div></div>'
 
 with c1:
     st.markdown(build_kanban_column("todo", "TO DO", kanban_todo, "orange", "✨ No pending tasks"), unsafe_allow_html=True)
