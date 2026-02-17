@@ -1210,6 +1210,10 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
+    # Connection status
+    status_color = "🟢" if sr_data['connected'] else "🔴"
+    st.caption(f"{status_color} Shiprocket API")
+    
     st.markdown("---")
     
     # === QUICK AWB LOOKUP ===
