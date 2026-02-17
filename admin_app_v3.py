@@ -1310,7 +1310,7 @@ default_page = "📁 Documents" if st.session_state.get("go_to_documents") else 
 if st.session_state.get("go_to_documents"):
     st.session_state.go_to_documents = False
 
-page = st.radio("", ["🏠 Dashboard", "📁 Documents"], horizontal=True, label_visibility="collapsed", index=0 if default_page == "🏠 Dashboard" else 1)
+page = st.radio("", ["🏠 Dashboard", "📁 Documents", "⚙️ Settings"], horizontal=True, label_visibility="collapsed", index=0 if default_page == "🏠 Dashboard" else 1)
 
 if page == "📁 Documents":
     # === DOCUMENTS PAGE ===
@@ -1365,6 +1365,83 @@ if page == "📁 Documents":
         st.rerun()
     
     st.stop()  # Stop here for Documents page
+
+if page == "⚙️ Settings":
+    # === SETTINGS PAGE ===
+    st.markdown("### ⚙️ Settings")
+    st.markdown("---")
+    
+    # Load schedules
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sched_file = os.path.join(script_dir, "public", "schedules", "schedules.json")
+    
+    if os.path.exists(sched_file):
+        with open(sched_file, "r") as f:
+            sched_data = json.load(f)
+    else:
+        sched_data = {"schedules": [], "updated_at": ""}
+    
+    st.markdown("#### 📅 Scheduled Batches")
+    st.caption("Configure automatic shipping schedules. When triggered, orders will be shipped, labels sorted, and you'll be notified.")
+    
+    for i, sched in enumerate(sched_data.get("schedules", [])):
+        with st.expander(f"{'🟢' if sched.get('enabled') else '🔴'} {sched.get('name', 'Schedule')}", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                new_name = st.text_input("Name", value=sched.get("name", ""), key=f"sched_name_{i}")
+                new_time = st.time_input("Time", value=datetime.strptime(sched.get("time", "09:00"), "%H:%M").time(), key=f"sched_time_{i}")
+            with col2:
+                new_enabled = st.checkbox("Enabled", value=sched.get("enabled", True), key=f"sched_enabled_{i}")
+                days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                new_days = st.multiselect("Days", options=days_options, default=sched.get("days", []), key=f"sched_days_{i}")
+            
+            if st.button("💾 Save", key=f"save_sched_{i}", use_container_width=True):
+                sched_data["schedules"][i]["name"] = new_name
+                sched_data["schedules"][i]["time"] = new_time.strftime("%H:%M")
+                sched_data["schedules"][i]["days"] = new_days
+                sched_data["schedules"][i]["enabled"] = new_enabled
+                sched_data["updated_at"] = datetime.now().isoformat()
+                
+                with open(sched_file, "w") as f:
+                    json.dump(sched_data, f, indent=2)
+                st.success(f"✅ {new_name} saved!")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("#### ➕ Add New Schedule")
+    with st.form("new_schedule"):
+        col1, col2 = st.columns(2)
+        with col1:
+            add_name = st.text_input("Schedule Name", placeholder="e.g., Night Batch")
+            add_time = st.time_input("Time", value=datetime.strptime("21:00", "%H:%M").time())
+        with col2:
+            add_enabled = st.checkbox("Enabled", value=True)
+            add_days = st.multiselect("Days", options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], default=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+        
+        if st.form_submit_button("➕ Add Schedule", use_container_width=True):
+            if add_name:
+                new_sched = {
+                    "id": f"sched-{len(sched_data.get('schedules', [])) + 1:03d}",
+                    "name": add_name,
+                    "time": add_time.strftime("%H:%M"),
+                    "days": add_days,
+                    "action": "Ship All Orders",
+                    "enabled": add_enabled,
+                    "last_run": None
+                }
+                sched_data["schedules"].append(new_sched)
+                sched_data["updated_at"] = datetime.now().isoformat()
+                
+                with open(sched_file, "w") as f:
+                    json.dump(sched_data, f, indent=2)
+                st.success(f"✅ {add_name} added!")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("#### 📱 WhatsApp Notifications")
+    st.info("🔜 Coming soon! Connect your WhatsApp group to receive batch notifications.")
+    
+    st.stop()  # Stop here for Settings page
 
 # === DASHBOARD PAGE ===
 # === SEARCH BAR ===
