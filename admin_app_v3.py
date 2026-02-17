@@ -785,6 +785,70 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
+# === SEARCH BAR ===
+search_col1, search_col2 = st.columns([4, 1])
+with search_col1:
+    search_query = st.text_input(
+        "🔍 Search",
+        placeholder="Search tasks, orders, AWBs, SKUs...",
+        label_visibility="collapsed",
+        key="global_search"
+    )
+with search_col2:
+    search_btn = st.button("🔍 Search", use_container_width=True)
+
+# Show search results if query exists
+if search_query:
+    st.markdown("---")
+    st.markdown(f"### 🔍 Search Results for: `{search_query}`")
+    
+    results_found = False
+    
+    # Search in tasks
+    matching_tasks = [t for t in tasks if search_query.lower() in t.get("title", "").lower()]
+    if matching_tasks:
+        results_found = True
+        with st.expander(f"📋 Tasks ({len(matching_tasks)} found)", expanded=True):
+            for t in matching_tasks:
+                status_emoji = "🟠" if t.get("status") == "open" else "🔵" if t.get("status") == "in_progress" else "🟢"
+                st.markdown(f"{status_emoji} **{t.get('title')}** - {t.get('status', 'unknown')}")
+    
+    # Search in batches (AWBs, SKUs)
+    matching_batches = []
+    for b in batches:
+        batch_str = str(b).lower()
+        if search_query.lower() in batch_str:
+            matching_batches.append(b)
+    
+    if matching_batches:
+        results_found = True
+        with st.expander(f"📦 Batches ({len(matching_batches)} found)", expanded=True):
+            for b in matching_batches[:10]:
+                ts = b.get("timestamp", "")[:16]
+                st.markdown(f"✅ **{ts}** - {b.get('shipped', 0)} shipped, {b.get('failed', 0)} failed")
+    
+    # Search in notes
+    matching_notes = [n for n in notes if search_query.lower() in n.get("content", "").lower()]
+    if matching_notes:
+        results_found = True
+        with st.expander(f"📝 Notes ({len(matching_notes)} found)", expanded=True):
+            for n in matching_notes:
+                icon = "🤖" if n.get("type") == "ai" else "👤"
+                st.markdown(f"{icon} {n.get('content', '')[:100]}...")
+    
+    # Search in schedules
+    matching_schedules = [s for s in schedules if search_query.lower() in s.get("name", "").lower()]
+    if matching_schedules:
+        results_found = True
+        with st.expander(f"⏰ Schedules ({len(matching_schedules)} found)", expanded=True):
+            for s in matching_schedules:
+                st.markdown(f"📅 **{s.get('name')}** - {s.get('time')} ({', '.join(s.get('days', [])[:3])})")
+    
+    if not results_found:
+        st.info(f"No results found for '{search_query}'. Try searching for task names, AWBs, or SKUs.")
+    
+    st.markdown("---")
+
 # === LIVE STATS BAR ===
 st.markdown(f"""
 <div class="stats-bar animate-slide">
