@@ -1884,6 +1884,7 @@ with b2:
 def ship_orders_dialog():
     import zipfile
     import re
+    import time
     from io import BytesIO
     from pypdf import PdfReader, PdfWriter
     
@@ -1924,8 +1925,9 @@ def ship_orders_dialog():
         if not new_orders:
             status_box.empty()
             progress.progress(100)
-            result_box.warning("📭 No NEW orders to ship!")
-            return
+            result_box.warning("📭 No NEW orders to ship! Closing in 5s...")
+            time.sleep(5)
+            st.rerun()
         
         # Step 3: Ship orders
         shipped_ids = []
@@ -1948,8 +1950,9 @@ def ship_orders_dialog():
         if not shipped_ids:
             status_box.empty()
             progress.progress(100)
-            result_box.warning("⚠️ No orders were shipped")
-            return
+            result_box.warning("⚠️ No orders were shipped. Closing in 5s...")
+            time.sleep(5)
+            st.rerun()
         
         # Step 4: Generate & sort labels
         show_status("🏷️", "Generating labels...", 55)
@@ -2046,14 +2049,14 @@ def ship_orders_dialog():
                         border-radius: 10px; padding: 20px; text-align: center;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🎉</div>
                 <div style="color: #3fb950; font-size: 18px; font-weight: 600;">Shipped {len(shipped_ids)} orders!</div>
-                <div style="color: #888; font-size: 14px; margin-top: 8px;">Pickup scheduled • Labels sorted • Manifest ready</div>
+                <div style="color: #888; font-size: 14px; margin-top: 8px;">Redirecting to Downloads...</div>
             </div>
         """, unsafe_allow_html=True)
         
-        if st.button("✅ Done", type="primary", use_container_width=True):
-            st.session_state.go_to_documents = True
-            st.cache_data.clear()
-            st.rerun()
+        time.sleep(3)
+        st.session_state.go_to_documents = True
+        st.cache_data.clear()
+        st.rerun()
         
     except Exception as e:
         status_box.empty()
