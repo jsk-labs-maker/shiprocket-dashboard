@@ -173,16 +173,27 @@ def track_awb(token, awb):
         )
         if r.ok:
             data = r.json()
-            # Extract shipment_id from tracking data
-            tracking = data.get("tracking_data", {})
-            shipment_id = tracking.get("shipment_id")
+            tracking_data = data.get("tracking_data", {})
+            
+            # Path 1: tracking_data.shipment_track[0].shipment_id
+            shipment_track = tracking_data.get("shipment_track", [])
+            if shipment_track and len(shipment_track) > 0:
+                track = shipment_track[0]
+                shipment_id = track.get("shipment_id")
+                if shipment_id:
+                    return {"success": True, "shipment_id": shipment_id, "data": track}
+            
+            # Path 2: Direct shipment_id in tracking_data
+            shipment_id = tracking_data.get("shipment_id")
             if shipment_id:
-                return {"success": True, "shipment_id": shipment_id, "data": tracking}
-            # Try alternate path
+                return {"success": True, "shipment_id": shipment_id, "data": tracking_data}
+            
+            # Path 3: Top level shipment_track
             if "shipment_track" in data:
                 for track in data.get("shipment_track", []):
                     if track.get("awb_code") == awb:
                         return {"success": True, "shipment_id": track.get("shipment_id"), "data": track}
+        
         return {"success": False, "error": "Shipment not found"}
     except Exception as e:
         return {"success": False, "error": str(e)}
