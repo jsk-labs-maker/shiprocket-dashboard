@@ -1212,22 +1212,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Quick actions
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄", help="Refresh"):
-            st.cache_data.clear()
-            st.rerun()
-    with col2:
-        if st.button("📥", help="Download Latest Batch Labels (Sorted by Courier+SKU)"):
-            download_latest_batch_labels()
-    
-    # Connection status
-    status_color = "🟢" if sr_data['connected'] else "🔴"
-    st.caption(f"{status_color} Shiprocket API")
-    
-    st.markdown("---")
-    
     # === QUICK AWB LOOKUP ===
     st.markdown("**🔍 Quick AWB Lookup**")
     awb_lookup = st.text_input(
