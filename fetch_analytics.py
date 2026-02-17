@@ -140,12 +140,14 @@ def process_orders(orders):
         
         # Process each product in order
         for product in order.get("products", [{}]):
+            # SKU is stored as 'channel_sku' in Shiprocket API
+            sku = product.get("channel_sku") or product.get("sku") or "Unknown"
             rows.append({
                 "order_id": order.get("channel_order_id", order.get("id", "")),
                 "date": order.get("created_at", "")[:10] if order.get("created_at") else "",
                 "status": status,
                 "category": category,
-                "sku": product.get("sku", "Unknown"),
+                "sku": sku,
                 "product_name": product.get("name", ""),
                 "awb": shipment.get("awb", ""),
                 "courier": shipment.get("courier_name", "")
