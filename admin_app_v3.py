@@ -570,6 +570,9 @@ button[kind="header"],
     padding: 20px;
     margin-bottom: 10px;
     transition: all 0.2s ease;
+    height: 350px;
+    display: flex;
+    flex-direction: column;
 }
 .section-box:hover {
     border-color: #58a6ff;
@@ -585,7 +588,17 @@ button[kind="header"],
     gap: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex-shrink: 0;
 }
+.section-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+.section-content::-webkit-scrollbar { width: 6px; }
+.section-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+.section-content::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.section-content::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
 .schedule { 
     background: rgba(13, 17, 23, 0.8);
     border-radius: 8px; 
@@ -608,6 +621,7 @@ button[kind="header"],
     border-radius: 6px; 
     font-size: 0.75rem;
     font-weight: 500;
+    flex-shrink: 0;
 }
 .note { 
     background: rgba(13, 17, 23, 0.8);
@@ -621,7 +635,7 @@ button[kind="header"],
     transform: translateX(4px);
 }
 .note.ai { border-left-color: #a855f7; }
-.note-text { color: #e6edf3; font-size: 0.88rem; line-height: 1.5; }
+.note-text { color: #e6edf3; font-size: 0.88rem; line-height: 1.5; word-wrap: break-word; }
 .note-time { color: #6e7681; font-size: 0.75rem; margin-top: 8px; }
 
 /* === KEYBOARD HINT === */
@@ -1369,16 +1383,16 @@ st.markdown("<br>", unsafe_allow_html=True)
 col_activity, col_summary = st.columns([2, 1.5], gap="medium")
 
 with col_activity:
-    # Build activity HTML in one block
+    # Build activity HTML in one block with scrollable content
     real_activities = get_activity()
     if not real_activities:
         real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
     
     activity_items = ""
-    for a in real_activities[:6]:
+    for a in real_activities[:10]:  # Show more activities (scrollable)
         activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
     
-    activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="activity-feed">{activity_items}</div></div>'
+    activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="section-content">{activity_items}</div></div>'
     st.markdown(activity_html, unsafe_allow_html=True)
 
 with col_summary:
@@ -1412,34 +1426,25 @@ st.markdown("<br>", unsafe_allow_html=True)
 b1, b2 = st.columns(2, gap="medium")
 
 with b1:
-    # Build schedules HTML in one block
-    schedules_html = '<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div>'
-    for s in schedules[:3]:
+    # Build schedules HTML in one block with scrollable content
+    sched_items = ""
+    for s in schedules[:10]:  # Show more schedules (scrollable)
         days = ", ".join(s.get("days", [])[:3])
-        schedules_html += f'''
-        <div class="schedule">
-            <div>
-                <div class="sched-name">{s.get("name","")}</div>
-                <div class="sched-meta">{s.get("time","")} • {days}</div>
-            </div>
-            <span class="sched-badge">✓ Active</span>
-        </div>'''
-    schedules_html += '</div>'
+        sched_items += f'<div class="schedule"><div><div class="sched-name">{s.get("name","")}</div><div class="sched-meta">{s.get("time","")} • {days}</div></div><span class="sched-badge">✓ Active</span></div>'
+    
+    schedules_html = f'<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div><div class="section-content">{sched_items}</div></div>'
     st.markdown(schedules_html, unsafe_allow_html=True)
 
 with b2:
-    # Build notes HTML in one block
-    notes_html = '<div class="section-box"><div class="section-title">📝 Notes</div>'
-    for n in notes[:5]:  # Show up to 5 notes
+    # Build notes HTML in one block with scrollable content
+    note_items = ""
+    for n in notes[:10]:  # Show more notes (scrollable)
         cls = "ai" if n.get("type") == "ai" else ""
         icon = "🤖" if n.get("type") == "ai" else "👤"
-        content = n.get("content", "")[:120]
-        notes_html += f'''
-        <div class="note {cls}">
-            <div class="note-text">{icon} {content}...</div>
-            <div class="note-time">{n.get("timestamp","")}</div>
-        </div>'''
-    notes_html += '</div>'
+        content = n.get("content", "")[:100]
+        note_items += f'<div class="note {cls}"><div class="note-text">{icon} {content}...</div><div class="note-time">{n.get("timestamp","")}</div></div>'
+    
+    notes_html = f'<div class="section-box"><div class="section-title">📝 Notes</div><div class="section-content">{note_items}</div></div>'
     st.markdown(notes_html, unsafe_allow_html=True)
     
     # Add Note button
