@@ -804,6 +804,82 @@ with st.sidebar:
     # Connection status
     status_color = "🟢" if sr_data['connected'] else "🔴"
     st.caption(f"{status_color} Shiprocket API")
+    
+    st.markdown("---")
+    
+    # === QUICK AWB LOOKUP ===
+    st.markdown("**🔍 Quick AWB Lookup**")
+    awb_lookup = st.text_input(
+        "AWB",
+        placeholder="Enter AWB number...",
+        label_visibility="collapsed",
+        key="quick_awb"
+    )
+    
+    if awb_lookup:
+        with st.spinner("Tracking..."):
+            try:
+                # Get token
+                from dotenv import load_dotenv
+                load_dotenv("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env")
+                import os
+                email = os.getenv('SHIPROCKET_EMAIL')
+                pwd = os.getenv('SHIPROCKET_PASSWORD')
+                
+                auth_r = requests.post(
+                    f"{SHIPROCKET_API}/auth/login",
+                    json={"email": email, "password": pwd},
+                    timeout=10
+                )
+                
+                if auth_r.ok:
+                    token = auth_r.json().get("token")
+                    headers = {"Authorization": f"Bearer {token}"}
+                    
+                    # Track AWB
+                    track_r = requests.get(
+                        f"{SHIPROCKET_API}/courier/track/awb/{awb_lookup}",
+                        headers=headers,
+                        timeout=15
+                    )
+                    
+                    if track_r.ok:
+                        data = track_r.json()
+                        tracking = data.get("tracking_data", {})
+                        
+                        # Get status
+                        current_status = tracking.get("shipment_status_id", 0)
+                        status_text = tracking.get("shipment_status", "Unknown")
+                        
+                        # Status colors
+                        if current_status >= 7:  # Delivered
+                            st.success(f"✅ **{status_text}**")
+                        elif current_status >= 4:  # In transit
+                            st.info(f"🚚 **{status_text}**")
+                        elif current_status >= 1:  # Picked up
+                            st.warning(f"📦 **{status_text}**")
+                        else:
+                            st.info(f"📋 **{status_text}**")
+                        
+                        # Show details
+                        courier = tracking.get("courier_name", "N/A")
+                        etd = tracking.get("etd", "N/A")
+                        
+                        st.caption(f"🚚 {courier}")
+                        if etd and etd != "N/A":
+                            st.caption(f"📅 ETA: {etd}")
+                        
+                        # Show latest activity
+                        activities = tracking.get("shipment_track_activities", [])
+                        if activities:
+                            latest = activities[0]
+                            st.caption(f"📍 {latest.get('activity', 'N/A')[:50]}")
+                    else:
+                        st.error("❌ AWB not found")
+                else:
+                    st.error("❌ Auth failed")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)[:30]}")
 
 
 # === HEADER ===
