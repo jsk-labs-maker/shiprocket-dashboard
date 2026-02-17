@@ -1732,9 +1732,10 @@ with c2:
 
 with c3:
     # Custom DONE column with delete buttons
-    st.markdown(f'''<div class="kanban-col done"><div class="kanban-header"><span class="kanban-header-pill done"><span class="k-dot green"></span> DONE ({len(kanban_done)})</span></div></div>''', unsafe_allow_html=True)
-    
     if kanban_done:
+        # Header
+        st.markdown(f'''<div class="kanban-col done"><div class="kanban-header"><span class="kanban-header-pill done"><span class="k-dot green"></span> DONE ({len(kanban_done)})</span></div><div class="kanban-tasks">''', unsafe_allow_html=True)
+        
         for task in kanban_done[:10]:
             task_id = task.get("id")
             task_title = task.get("title", "Task")[:35]
@@ -1756,10 +1757,14 @@ with c3:
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
+        
         if len(kanban_done) > 10:
             st.caption(f"+ {len(kanban_done) - 10} more")
+        
+        st.markdown('</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown("<div style='color: #6e7681; text-align: center; padding: 20px;'>No completed tasks</div>", unsafe_allow_html=True)
+        # Empty state - use the same build function
+        st.markdown(build_kanban_column("done", "DONE", [], "green", "No completed tasks"), unsafe_allow_html=True)
 
 # === ACTIVITY + DOWNLOADS SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
