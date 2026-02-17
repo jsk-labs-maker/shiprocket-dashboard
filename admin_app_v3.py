@@ -27,6 +27,7 @@ st.set_page_config(
 # No disruptive page reloads - data refreshes when user interacts
 
 # === CONSTANTS ===
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jsk-labs-maker/shiprocket-dashboard/main/public"
 SHIPROCKET_API = "https://apiv2.shiprocket.in/v1/external"
 
@@ -690,8 +691,8 @@ div[data-testid="stMetric"] {
 # === DOCUMENT MANAGEMENT ===
 def get_documents():
     """Load documents list from local file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    index_file = os.path.join(script_dir, "public", "documents", "index.json")
+    
+    index_file = os.path.join(SCRIPT_DIR, "public", "documents", "index.json")
     
     if os.path.exists(index_file):
         try:
@@ -718,16 +719,16 @@ def get_documents():
 
 def save_documents_index(documents):
     """Save documents index to local file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    index_file = os.path.join(script_dir, "public", "documents", "index.json")
+    
+    index_file = os.path.join(SCRIPT_DIR, "public", "documents", "index.json")
     os.makedirs(os.path.dirname(index_file), exist_ok=True)
     with open(index_file, "w") as f:
         json.dump({"documents": documents, "updated_at": datetime.now().isoformat()}, f, indent=2)
 
 def save_document(filename, content, doc_type="labels"):
     """Save a document to the documents folder and update index."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    docs_dir = os.path.join(script_dir, "public", "documents")
+    
+    docs_dir = os.path.join(SCRIPT_DIR, "public", "documents")
     os.makedirs(docs_dir, exist_ok=True)
     
     # Save file
@@ -752,8 +753,8 @@ def save_document(filename, content, doc_type="labels"):
 
 def delete_old_documents():
     """Delete documents older than 7 days."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    docs_dir = os.path.join(script_dir, "public", "documents")
+    
+    docs_dir = os.path.join(SCRIPT_DIR, "public", "documents")
     cutoff = datetime.now() - timedelta(days=7)
     
     docs = get_documents()
@@ -782,8 +783,8 @@ def get_tasks():
 @st.cache_data(ttl=15)  # Refresh every 15 seconds
 def get_batches():
     """Load batches from local file first, fallback to GitHub."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    local_file = os.path.join(script_dir, "public", "batches_history.json")
+    
+    local_file = os.path.join(SCRIPT_DIR, "public", "batches_history.json")
     
     # Try local file first (faster, real-time)
     if os.path.exists(local_file):
@@ -802,8 +803,8 @@ def get_batches():
 @st.cache_data(ttl=10)  # Short TTL to see new notes quickly
 def get_notes():
     all_notes = []
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    notes_file = os.path.join(script_dir, "local_notes.json")
+    
+    notes_file = os.path.join(SCRIPT_DIR, "local_notes.json")
     
     # 1. Load from local file first (user-added notes)
     try:
@@ -850,8 +851,8 @@ def get_schedules():
 @st.cache_data(ttl=30)
 def get_activity():
     """Load activity from local file with real-time timestamps."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    activity_file = os.path.join(script_dir, "local_activity.json")
+    
+    activity_file = os.path.join(SCRIPT_DIR, "local_activity.json")
     
     try:
         if os.path.exists(activity_file):
@@ -884,8 +885,8 @@ def get_activity():
 
 def add_activity(text, activity_type="green"):
     """Add a new activity entry (called by AI during automation)."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    activity_file = os.path.join(script_dir, "local_activity.json")
+    
+    activity_file = os.path.join(SCRIPT_DIR, "local_activity.json")
     
     activities = []
     if os.path.exists(activity_file):
@@ -922,8 +923,8 @@ def get_shiprocket_credentials():
 
 def _load_cached_sr_data():
     """Load cached Shiprocket data from local file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    cache_file = os.path.join(script_dir, "sr_cache.json")
+    
+    cache_file = os.path.join(SCRIPT_DIR, "sr_cache.json")
     try:
         if os.path.exists(cache_file):
             with open(cache_file, "r") as f:
@@ -934,8 +935,8 @@ def _load_cached_sr_data():
 
 def _save_cached_sr_data(data):
     """Save Shiprocket data to local cache file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    cache_file = os.path.join(script_dir, "sr_cache.json")
+    
+    cache_file = os.path.join(SCRIPT_DIR, "sr_cache.json")
     try:
         with open(cache_file, "w") as f:
             json.dump(data, f)
@@ -1338,8 +1339,8 @@ if page == "📁 Documents":
                 created = doc.get("created_at", "")[:16].replace("T", " ")
                 st.caption(f"📅 {created} • 💾 {size_str}")
             with col2:
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                filepath = os.path.join(script_dir, "public", "documents", doc.get("filename", ""))
+                
+                filepath = os.path.join(SCRIPT_DIR, "public", "documents", doc.get("filename", ""))
                 if os.path.exists(filepath):
                     with open(filepath, "rb") as f:
                         st.download_button(
@@ -1377,8 +1378,8 @@ if page == "⚙️ Settings":
     st.markdown("---")
     
     # Load schedules
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    sched_file = os.path.join(script_dir, "public", "schedules", "schedules.json")
+    
+    sched_file = os.path.join(SCRIPT_DIR, "public", "schedules", "schedules.json")
     
     if os.path.exists(sched_file):
         with open(sched_file, "r") as f:
@@ -1566,8 +1567,8 @@ if sr_data['new_orders'] > 50:
 def load_local_tasks():
     """Load tasks from local file first, then GitHub as fallback.
     Returns None if no file exists (first run), returns [] if user deleted all tasks."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    tasks_file = os.path.join(script_dir, "local_tasks.json")
+    
+    tasks_file = os.path.join(SCRIPT_DIR, "local_tasks.json")
     
     # 1. Try local file first - this is authoritative if it exists
     if os.path.exists(tasks_file):
@@ -1583,15 +1584,15 @@ def load_local_tasks():
 
 def save_local_tasks(tasks):
     """Save tasks to local file and GitHub public folder."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     
     # Save to local file
-    local_file = os.path.join(script_dir, "local_tasks.json")
+    local_file = os.path.join(SCRIPT_DIR, "local_tasks.json")
     with open(local_file, "w") as f:
         json.dump(tasks, f, indent=2)
     
     # Also save to public/tasks/tasks.json (for GitHub sync)
-    public_file = os.path.join(script_dir, "public", "tasks", "tasks.json")
+    public_file = os.path.join(SCRIPT_DIR, "public", "tasks", "tasks.json")
     os.makedirs(os.path.dirname(public_file), exist_ok=True)
     with open(public_file, "w") as f:
         json.dump({"tasks": tasks}, f, indent=2)
@@ -1777,8 +1778,8 @@ with b1:
         st.markdown('<div class="section-title" style="margin-bottom: 10px;">📅 Scheduled Deliverables</div>', unsafe_allow_html=True)
         
         # Load local schedules file for editing
-        sched_dir = os.path.dirname(os.path.abspath(__file__))
-        sched_file = os.path.join(sched_dir, "public", "schedules", "schedules.json")
+        
+        sched_file = os.path.join(SCRIPT_DIR, "public", "schedules", "schedules.json")
         try:
             with open(sched_file, "r") as f:
                 local_schedules = json.load(f)
@@ -2032,8 +2033,8 @@ def ship_orders_dialog():
             save_document(f"{timestamp}_manifest.pdf", manifest_content, doc_type="manifest")
         
         # Update records
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        batch_file = os.path.join(script_dir, "public", "batches_history.json")
+        
+        batch_file = os.path.join(SCRIPT_DIR, "public", "batches_history.json")
         batch_data = {"timestamp": datetime.now().isoformat(), "date": today, "time": datetime.now().strftime("%I:%M %p"), "display_time": datetime.now().strftime("%I:%M %p"), "total_orders": len(new_orders), "shipped": len(shipped_ids), "failed": len(new_orders) - len(shipped_ids), "awbs": shipped_awbs[:10], "source": "ship_orders_now"}
         with open(batch_file, "r") as f:
             batches_data = json.load(f)
@@ -2041,10 +2042,10 @@ def ship_orders_dialog():
         with open(batch_file, "w") as f:
             json.dump(batches_data, f, indent=2)
         
-        with open(os.path.join(script_dir, "local_activity.json"), "r") as f:
+        with open(os.path.join(SCRIPT_DIR, "local_activity.json"), "r") as f:
             activities = json.load(f)
         activities.insert(0, {"text": f"🚀 Shipped {len(shipped_ids)} orders!", "timestamp": datetime.now().isoformat(), "type": "green"})
-        with open(os.path.join(script_dir, "local_activity.json"), "w") as f:
+        with open(os.path.join(SCRIPT_DIR, "local_activity.json"), "w") as f:
             json.dump(activities[:20], f, indent=2)
         
         # Complete!
