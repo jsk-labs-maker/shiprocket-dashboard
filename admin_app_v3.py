@@ -1165,10 +1165,8 @@ st.markdown("""
 
 
 # === AUTO REFRESH (every 60 seconds) ===
-st.markdown("""
-<script>
-setTimeout(function() {
-    window.location.reload();
-}, 60000);
-</script>
-""", unsafe_allow_html=True)
+# Using meta refresh tag (works in Streamlit)
+st.markdown(
+    '<meta http-equiv="refresh" content="60">',
+    unsafe_allow_html=True
+)
