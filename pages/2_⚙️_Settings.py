@@ -156,27 +156,125 @@ with settings_col2:
     # API Settings
     st.markdown('<div class="settings-card">', unsafe_allow_html=True)
     st.markdown("### 🔐 API Configuration")
-    st.markdown('<p class="settings-desc">Shiprocket API credentials and status</p>', unsafe_allow_html=True)
+    st.markdown('<p class="settings-desc">Enter your Shiprocket credentials to connect</p>', unsafe_allow_html=True)
+    
+    # Initialize session state for credentials
+    if 'sr_email' not in st.session_state:
+        st.session_state.sr_email = ""
+    if 'sr_password' not in st.session_state:
+        st.session_state.sr_password = ""
+    if 'sr_connected' not in st.session_state:
+        st.session_state.sr_connected = False
+    if 'sr_token' not in st.session_state:
+        st.session_state.sr_token = None
+    
+    # Try to load from env file if not in session
+    if not st.session_state.sr_email:
+        try:
+            from dotenv import load_dotenv
+            import os
+            load_dotenv("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env")
+            st.session_state.sr_email = os.getenv('SHIPROCKET_EMAIL', '')
+            st.session_state.sr_password = os.getenv('SHIPROCKET_PASSWORD', '')
+        except:
+            pass
     
     # Status indicator
-    st.markdown('<span class="api-status connected">🟢 Connected to Shiprocket</span>', unsafe_allow_html=True)
+    if st.session_state.sr_connected:
+        st.markdown('<span class="api-status connected">🟢 Connected to Shiprocket</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="api-status disconnected">🔴 Not Connected</span>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    st.text_input("📧 Email", value="openclawd12@gmail.com", disabled=True)
-    st.text_input("🔑 API Token", value="••••••••••••••••••••••••", type="password", disabled=True)
+    # Credential inputs
+    email_input = st.text_input(
+        "📧 Shiprocket Email", 
+        value=st.session_state.sr_email,
+        placeholder="your@email.com",
+        key="email_input"
+    )
+    password_input = st.text_input(
+        "🔑 Password", 
+        value=st.session_state.sr_password,
+        type="password",
+        placeholder="Enter password",
+        key="password_input"
+    )
     
-    token_col1, token_col2 = st.columns(2)
-    with token_col1:
-        if st.button("🔄 Refresh Token", use_container_width=True):
-            st.toast("Token refreshed successfully!", icon="✅")
-    with token_col2:
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("💾 Save & Connect", use_container_width=True, type="primary"):
+            if email_input and password_input:
+                with st.spinner("Connecting to Shiprocket..."):
+                    try:
+                        import requests
+                        r = requests.post(
+                            "https://apiv2.shiprocket.in/v1/external/auth/login",
+                            json={"email": email_input, "password": password_input},
+                            timeout=10
+                        )
+                        if r.ok:
+                            token = r.json().get("token")
+                            st.session_state.sr_email = email_input
+                            st.session_state.sr_password = password_input
+                            st.session_state.sr_token = token
+                            st.session_state.sr_connected = True
+                            
+                            # Save to env file
+                            try:
+                                with open("/Users/klaus/.openclaw/workspace/shiprocket-credentials.env", "w") as f:
+                                    f.write(f"SHIPROCKET_EMAIL={email_input}\n")
+                                    f.write(f"SHIPROCKET_PASSWORD={password_input}\n")
+                            except:
+                                pass
+                            
+                            st.toast("✅ Connected successfully!", icon="🎉")
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid credentials")
+                    except Exception as e:
+                        st.error(f"❌ Connection failed: {str(e)[:50]}")
+            else:
+                st.warning("Please enter both email and password")
+    
+    with btn_col2:
         if st.button("🧪 Test Connection", use_container_width=True):
-            with st.spinner("Testing..."):
-                import time
-                time.sleep(1)
-            st.toast("Connection successful!", icon="✅")
+            if st.session_state.sr_email and st.session_state.sr_password:
+                with st.spinner("Testing..."):
+                    try:
+                        import requests
+                        r = requests.post(
+                            "https://apiv2.shiprocket.in/v1/external/auth/login",
+                            json={"email": st.session_state.sr_email, "password": st.session_state.sr_password},
+                            timeout=10
+                        )
+                        if r.ok:
+                            # Get wallet balance
+                            token = r.json().get("token")
+                            wr = requests.get(
+                                "https://apiv2.shiprocket.in/v1/external/account/details/wallet-balance",
+                                headers={"Authorization": f"Bearer {token}"},
+                                timeout=10
+                            )
+                            if wr.ok:
+                                balance = float(wr.json().get("data", {}).get("balance_amount", 0))
+                                st.toast(f"✅ Connected! Wallet: ₹{balance:,.0f}", icon="💰")
+                                st.session_state.sr_connected = True
+                            else:
+                                st.toast("✅ Connected!", icon="✅")
+                        else:
+                            st.toast("❌ Connection failed", icon="❌")
+                            st.session_state.sr_connected = False
+                    except Exception as e:
+                        st.toast(f"❌ Error: {str(e)[:30]}", icon="❌")
+            else:
+                st.warning("Please enter credentials first")
     
-    st.caption("Token expires in 9 days • Last refreshed: Today 8:30 AM")
+    if st.session_state.sr_connected:
+        st.caption("✅ Credentials saved • Token auto-refreshes")
+    else:
+        st.caption("Enter your Shiprocket login credentials above")
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
 # === SCHEDULE SETTINGS ===
