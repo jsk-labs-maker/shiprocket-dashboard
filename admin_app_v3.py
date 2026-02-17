@@ -1276,12 +1276,12 @@ with st.sidebar:
     
     # Connection status
     status_color = "🟢" if sr_data['connected'] else "🔴"
-    st.caption(f"{status_color} Shiprocket API")
+    st.markdown(f"<p style='color: #ffffff; font-size: 0.85rem; margin: 0;'>{status_color} Shiprocket API</p>", unsafe_allow_html=True)
     
     st.markdown("---")
     
     # === QUICK AWB LOOKUP ===
-    st.markdown("**🔍 Quick AWB Lookup**")
+    st.markdown("<p style='color: #ffffff; font-weight: 600; margin-bottom: 8px;'>🔍 Quick AWB Lookup</p>", unsafe_allow_html=True)
     awb_lookup = st.text_input(
         "AWB",
         placeholder="Enter AWB number...",
