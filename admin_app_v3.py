@@ -797,35 +797,62 @@ def get_shiprocket_credentials():
     # 2. Fallback: hardcoded for internal use
     return "openclawd12@gmail.com", "Kluzo@1212"
 
-@st.cache_data(ttl=30)
+def _load_cached_sr_data():
+    """Load cached Shiprocket data from local file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_file = os.path.join(script_dir, "sr_cache.json")
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, "r") as f:
+                return json.load(f)
+    except:
+        pass
+    return None
+
+def _save_cached_sr_data(data):
+    """Save Shiprocket data to local cache file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_file = os.path.join(script_dir, "sr_cache.json")
+    try:
+        with open(cache_file, "w") as f:
+            json.dump(data, f)
+    except:
+        pass
+
+@st.cache_data(ttl=120)  # Cache for 2 minutes
 def get_shiprocket_data():
     """Fetch wallet balance and new order count from Shiprocket API."""
     email, pwd = get_shiprocket_credentials()
     
+    # Try to load cached data first (for fast initial load)
+    cached = _load_cached_sr_data()
+    
     try:
-        # Login to Shiprocket
-        r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
+        # Login to Shiprocket (shorter timeout)
+        r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=5)
         if not r.ok:
-            return {"wallet": 0, "new_orders": 0, "connected": False, "error": f"Login failed: {r.status_code}"}
+            return cached or {"wallet": 0, "new_orders": 0, "connected": False, "error": f"Login failed"}
         
         token = r.json().get("token")
         headers = {"Authorization": f"Bearer {token}"}
         
-        # Get wallet balance
-        wr = requests.get(f"{SHIPROCKET_API}/account/details/wallet-balance", headers=headers, timeout=10)
+        # Get wallet balance (shorter timeout)
+        wr = requests.get(f"{SHIPROCKET_API}/account/details/wallet-balance", headers=headers, timeout=5)
         wallet = float(wr.json().get("data", {}).get("balance_amount", 0)) if wr.ok else 0
         
-        # Get actual NEW orders (status=NEW, ready to ship)
-        new_r = requests.get(f"{SHIPROCKET_API}/orders?filter=new&per_page=100", headers=headers, timeout=10)
+        # Get actual NEW orders (shorter timeout)
+        new_r = requests.get(f"{SHIPROCKET_API}/orders?filter=new&per_page=100", headers=headers, timeout=5)
         new_count = 0
         if new_r.ok:
             orders = new_r.json().get("data", [])
-            # Count only orders with actual status "NEW"
             new_count = sum(1 for o in orders if o.get("status") == "NEW")
         
-        return {"wallet": wallet, "new_orders": new_count, "connected": True}
+        result = {"wallet": wallet, "new_orders": new_count, "connected": True}
+        _save_cached_sr_data(result)  # Save for next time
+        return result
     except Exception as e:
-        return {"wallet": 0, "new_orders": 0, "connected": False, "error": str(e)}
+        # Return cached data if API fails
+        return cached or {"wallet": 0, "new_orders": 0, "connected": False, "error": str(e)}
 
 # Load all data
 tasks = get_tasks()
