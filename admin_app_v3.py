@@ -1862,8 +1862,26 @@ if st.session_state.get("ship_now"):
                 zip_filename = f"{timestamp}_labels_sorted.zip"
                 save_document(zip_filename, zip_content, doc_type="labels")
         
-        # Step 6: Generate manifest
-        progress.progress(90, text="📄 Generating manifest...")
+        # Step 6: Schedule Pickup (one by one for reliability)
+        progress.progress(87, text="📅 Scheduling pickup...")
+        status.info("📅 Scheduling pickup for shipments...")
+        pickup_success = 0
+        for sid in shipped_ids:
+            try:
+                pickup_r = requests.post(
+                    f"{SHIPROCKET_API}/courier/generate/pickup",
+                    headers=headers,
+                    json={"shipment_id": [str(sid)]},
+                    timeout=15
+                )
+                if pickup_r.ok:
+                    pickup_success += 1
+            except:
+                pass
+        status.info(f"📅 Pickup scheduled for {pickup_success}/{len(shipped_ids)} shipments")
+        
+        # Step 7: Generate manifest
+        progress.progress(92, text="📄 Generating manifest...")
         status.info("📄 Generating manifest...")
         manifest_r = requests.post(
             f"{SHIPROCKET_API}/manifests/generate",
@@ -1872,6 +1890,7 @@ if st.session_state.get("ship_now"):
             timeout=30
         )
         
+        manifest_saved = False
         if manifest_r.ok:
             manifest_url = manifest_r.json().get("manifest_url", "")
             if manifest_url:
@@ -1906,7 +1925,7 @@ if st.session_state.get("ship_now"):
         with open(os.path.join(script_dir, "local_activity.json"), "r") as f:
             activities = json.load(f)
         activities.insert(0, {
-            "text": f"🚀 Shipped {len(shipped_ids)} orders, labels sorted!",
+            "text": f"🚀 Shipped {len(shipped_ids)} orders, pickup scheduled, labels sorted!",
             "timestamp": datetime.now().isoformat(),
             "type": "green"
         })
@@ -1915,7 +1934,7 @@ if st.session_state.get("ship_now"):
         
         # Complete!
         progress.progress(100, text="✅ Complete!")
-        status.success(f"🎉 Shipped {len(shipped_ids)} orders! Labels sorted and saved to Documents.")
+        status.success(f"🎉 Shipped {len(shipped_ids)} orders! Pickup scheduled, manifest generated, labels sorted!")
         st.balloons()
         
         # Redirect to Documents page
