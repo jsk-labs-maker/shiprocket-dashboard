@@ -1386,24 +1386,6 @@ with c3:
 with c4:
     st.markdown(build_kanban_column("archive", "ARCHIVE", kanban_archive, "gray", "No archived tasks"), unsafe_allow_html=True)
 
-# Task management buttons (outside the columns)
-st.markdown("<br>", unsafe_allow_html=True)
-tcol1, tcol2, tcol3, tcol4 = st.columns(4, gap="small")
-with tcol1:
-    with st.expander("➕ Add Task"):
-        new_title = st.text_input("Task title", key="new_task_title", placeholder="Enter task...")
-        new_priority = st.selectbox("Priority", ["high", "medium", "low"], index=1, key="new_task_pri")
-        if st.button("Add Task", key="add_task_btn", use_container_width=True):
-            if new_title:
-                new_id = max([t.get("id", 0) for t in st.session_state.kanban_tasks] + [0]) + 1
-                st.session_state.kanban_tasks.append({
-                    "id": new_id, "title": new_title, "status": "todo", 
-                    "priority": new_priority, "category": "other", "desc": ""
-                })
-                save_local_tasks(st.session_state.kanban_tasks)
-                st.rerun()
-
-
 # === MIDDLE SECTION: Activity + Summary ===
 st.markdown("<br>", unsafe_allow_html=True)
 col_activity, col_summary = st.columns([2, 1.5], gap="medium")
