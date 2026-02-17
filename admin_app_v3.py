@@ -1704,11 +1704,12 @@ st.markdown("""
 
 c1, c2, c3 = st.columns(3, gap="medium")
 
-def build_task_html(task):
+def build_task_html(task, show_delete=False):
     """Build HTML for a single task card."""
     priority = task.get("priority", "medium")
     pri_dot = {"high": "red", "medium": "orange", "low": "green"}.get(priority, "orange")
-    return f'<div class="task"><div class="task-left"><div class="t-dot {pri_dot}"></div><span class="t-text">{task.get("title", "Task")}</span></div><div class="task-right"><span class="task-btn">📁</span><span class="task-btn delete">●</span></div></div>'
+    # Simple task card - no action buttons (those are handled by Streamlit)
+    return f'<div class="task"><div class="task-left"><div class="t-dot {pri_dot}"></div><span class="t-text">{task.get("title", "Task")}</span></div></div>'
 
 def build_kanban_column(col_type, title, tasks, dot_class, empty_msg):
     """Build complete HTML for a kanban column."""
@@ -1730,31 +1731,35 @@ with c2:
     st.markdown(build_kanban_column("doing", "IN PROGRESS", kanban_doing, "blue", "🎯 No tasks in progress"), unsafe_allow_html=True)
 
 with c3:
-    st.markdown(build_kanban_column("done", "DONE", kanban_done, "green", "No completed tasks"), unsafe_allow_html=True)
+    # Custom DONE column with delete buttons
+    st.markdown(f'''<div class="kanban-col done"><div class="kanban-header"><span class="kanban-header-pill done"><span class="k-dot green"></span> DONE ({len(kanban_done)})</span></div></div>''', unsafe_allow_html=True)
     
-    # Delete buttons for completed tasks
     if kanban_done:
-        with st.expander("🗑️ Delete completed tasks", expanded=False):
-            for task in kanban_done[:10]:
-                task_id = task.get("id")
-                task_title = task.get("title", "Task")[:30]
-                col_a, col_b = st.columns([4, 1])
-                with col_a:
-                    st.caption(f"• {task_title}")
-                with col_b:
-                    if st.button("❌", key=f"del_{task_id}", help=f"Delete"):
-                        # Delete task from local_tasks.json
-                        try:
-                            tasks_file = os.path.join(SCRIPT_DIR, "local_tasks.json")
-                            with open(tasks_file, "r") as f:
-                                all_tasks = json.load(f)
-                            all_tasks = [t for t in all_tasks if t.get("id") != task_id]
-                            with open(tasks_file, "w") as f:
-                                json.dump(all_tasks, f, indent=2)
-                            st.success(f"Deleted!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Delete failed: {e}")
+        for task in kanban_done[:10]:
+            task_id = task.get("id")
+            task_title = task.get("title", "Task")[:35]
+            priority = task.get("priority", "medium")
+            pri_color = {"high": "🔴", "medium": "🟠", "low": "🟢"}.get(priority, "🟠")
+            
+            col_t, col_d = st.columns([5, 1])
+            with col_t:
+                st.markdown(f"<div style='background: rgba(22,27,34,0.6); border: 1px solid #21262d; border-radius: 8px; padding: 10px 12px; margin: 4px 0;'><span>{pri_color}</span> <span style='color: #e6edf3;'>{task_title}</span></div>", unsafe_allow_html=True)
+            with col_d:
+                if st.button("🗑️", key=f"del_{task_id}", help="Delete task"):
+                    try:
+                        tasks_file = os.path.join(SCRIPT_DIR, "local_tasks.json")
+                        with open(tasks_file, "r") as f:
+                            all_tasks = json.load(f)
+                        all_tasks = [t for t in all_tasks if t.get("id") != task_id]
+                        with open(tasks_file, "w") as f:
+                            json.dump(all_tasks, f, indent=2)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        if len(kanban_done) > 10:
+            st.caption(f"+ {len(kanban_done) - 10} more")
+    else:
+        st.markdown("<div style='color: #6e7681; text-align: center; padding: 20px;'>No completed tasks</div>", unsafe_allow_html=True)
 
 # === ACTIVITY + DOWNLOADS SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
