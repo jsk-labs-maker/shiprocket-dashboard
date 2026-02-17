@@ -1771,7 +1771,8 @@ with b1:
     st.markdown('<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div></div>', unsafe_allow_html=True)
     
     # Load local schedules file for editing
-    sched_file = os.path.join(script_dir, "public", "schedules", "schedules.json")
+    sched_dir = os.path.dirname(os.path.abspath(__file__))
+    sched_file = os.path.join(sched_dir, "public", "schedules", "schedules.json")
     try:
         with open(sched_file, "r") as f:
             local_schedules = json.load(f)
