@@ -968,11 +968,6 @@ with st.sidebar:
     elif not sr_data.get('connected'):
         st.warning("⚠️ Not connected to Shiprocket")
     
-    # Refresh button to clear cache
-    if st.button("🔄 Refresh Data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-    
     # Stats cards
     st.markdown(f"""
     <div class="sidebar-stat">
