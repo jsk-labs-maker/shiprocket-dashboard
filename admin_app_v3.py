@@ -15,7 +15,7 @@ st.set_page_config(
     page_title="Kluzo | Dashboard",
     page_icon="😎",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # === CONSTANTS ===
@@ -29,7 +29,13 @@ st.markdown("""
 
 .stApp { background: #0d1117 !important; }
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
-[data-testid="stSidebar"] { background: #080b10 !important; }
+[data-testid="stSidebar"] { background: #080b10 !important; min-width: 280px !important; }
+
+/* Hide sidebar collapse button - keep sidebar always visible */
+[data-testid="collapsedControl"] { display: none !important; }
+button[kind="header"] { display: none !important; }
+.stSidebar [data-testid="stSidebarNav"] button { display: none !important; }
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
 
 /* Sidebar profile */
 .profile-box {
