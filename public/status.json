@@ -1,8 +1,8 @@
 {
   "status": "processing",
-  "message": "Starting workflow...",
-  "current_task": "Starting workflow...",
-  "timestamp": "2026-02-17T18:01:26.550626",
-  "updated_at": "2026-02-17T18:01:26.550632",
-  "progress": 10
+  "message": "Shipping 21 orders...",
+  "current_task": "Shipping 21 orders...",
+  "timestamp": "2026-02-17T18:01:33.005814",
+  "updated_at": "2026-02-17T18:01:33.005835",
+  "progress": 40
 }

@@ -207,25 +207,27 @@ for col, key, label, count in cards:
         </div>
         """, unsafe_allow_html=True)
 
-# Delivery Rate
+# Net Delivery Rate
 st.markdown("<br>", unsafe_allow_html=True)
-shipped_total = s_intransit + s_delivered + s_rto + s_undelivered
-delivery_rate = (s_delivered / shipped_total * 100) if shipped_total > 0 else 0
+net_total = s_intransit + s_delivered + s_rto + s_undelivered  # Excludes unshipped
+net_delivery_rate = (s_delivered / net_total * 100) if net_total > 0 else 0
 
-if delivery_rate >= 90:
+if net_delivery_rate >= 90:
     rc, re, rt = "#3fb950", "🏆", "Excellent"
-elif delivery_rate >= 80:
+elif net_delivery_rate >= 80:
     rc, re, rt = "#58a6ff", "👍", "Good"
-elif delivery_rate >= 70:
+elif net_delivery_rate >= 70:
     rc, re, rt = "#f0883e", "⚠️", "Needs Improvement"
 else:
     rc, re, rt = "#f85149", "🚨", "Critical"
 
 st.markdown(f"""
 <div style="background: rgba(22, 27, 34, 0.9); border: 1px solid {rc}; border-radius: 12px; padding: 20px; text-align: center;">
-    <div style="font-size: 1rem; color: #8b949e;">Delivery Success Rate</div>
-    <div style="font-size: 3rem; font-weight: 700; color: {rc};">{delivery_rate:.1f}%</div>
+    <div style="font-size: 0.85rem; color: #8b949e; margin-bottom: 4px;">Net Total Orders (Shipped): <strong style="color: #e6edf3;">{net_total}</strong></div>
+    <div style="font-size: 1rem; color: #8b949e;">Net Delivery %</div>
+    <div style="font-size: 3rem; font-weight: 700; color: {rc};">{net_delivery_rate:.1f}%</div>
     <div style="font-size: 1.2rem; color: {rc};">{re} {rt}</div>
+    <div style="font-size: 0.75rem; color: #6e7681; margin-top: 8px;">Delivered ÷ (Total - Unshipped)</div>
 </div>
 """, unsafe_allow_html=True)
 

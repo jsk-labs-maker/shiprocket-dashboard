@@ -3,27 +3,58 @@
     {
       "id": "morning_batch",
       "name": "Morning Batch",
-      "time": "09:00",
-      "days": ["Monday", "Tuesday", "Wednesday"],
-      "active": true,
-      "description": "First batch of the day"
+      "time": "09:30",
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Friday",
+        "Thursday",
+        "Saturday"
+      ],
+      "active": false,
+      "description": "First batch of the day",
+      "enabled": true
     },
     {
       "id": "afternoon_batch",
       "name": "Afternoon Batch",
       "time": "14:00",
-      "days": ["Monday", "Tuesday", "Wednesday"],
-      "active": true,
-      "description": "Mid-day batch"
+      "days": [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Saturday",
+        "Friday"
+      ],
+      "active": false,
+      "description": "Mid-day batch",
+      "enabled": true
     },
     {
       "id": "evening_batch",
       "name": "Evening Batch",
       "time": "18:00",
-      "days": ["Monday", "Tuesday", "Wednesday"],
-      "active": true,
-      "description": "Final batch of the day"
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "active": false,
+      "description": "Final batch of the day",
+      "enabled": false
+    },
+    {
+      "id": "sched-004",
+      "name": "sd",
+      "time": "21:00",
+      "days": [],
+      "action": "Ship All Orders",
+      "enabled": false,
+      "last_run": null
     }
   ],
-  "updated_at": "2026-02-17T18:00:00Z"
+  "updated_at": "2026-02-17T16:42:36.955383"
 }
