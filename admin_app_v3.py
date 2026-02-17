@@ -2008,6 +2008,7 @@ if search_query:
 
 # === LIVE STATS BAR ===
 total_today = sum(b.get("total_orders", 0) for b in today_batches)
+today_cancelled = sum(b.get("cancelled_duplicates", 0) for b in today_batches)
 st.markdown(f"""
 <div class="stats-bar animate-slide">
     <div class="stat-item">
@@ -2018,6 +2019,11 @@ st.markdown(f"""
     <div class="stat-item">
         <div class="stat-value">📋 {sr_data['new_orders']}</div>
         <div class="stat-label">New Orders</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <div class="stat-value">🚫 {today_cancelled}</div>
+        <div class="stat-label">Duplicates Cancelled</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
