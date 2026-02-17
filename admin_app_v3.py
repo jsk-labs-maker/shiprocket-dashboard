@@ -1880,157 +1880,92 @@ with b2:
 
 
 # === SHIP NOW DIALOG ===
-@st.dialog("🚀 Shipping Orders", width="large")
+@st.dialog("🚀 Shipping Orders", width="small")
 def ship_orders_dialog():
     import zipfile
     import re
     from io import BytesIO
     from pypdf import PdfReader, PdfWriter
     
-    # Status container with styling
-    st.markdown("""
-        <style>
-        .step-item { padding: 8px 12px; margin: 4px 0; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
-        .step-pending { background: rgba(100, 100, 100, 0.2); color: #888; }
-        .step-active { background: rgba(88, 166, 255, 0.2); color: #58a6ff; animation: pulse 1s infinite; }
-        .step-done { background: rgba(46, 160, 67, 0.2); color: #3fb950; }
-        .step-error { background: rgba(248, 81, 73, 0.2); color: #f85149; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # Step indicators
-    steps = [
-        ("🔐", "Login to Shiprocket"),
-        ("📦", "Fetch NEW orders"),
-        ("🚚", "Ship orders"),
-        ("🏷️", "Generate labels"),
-        ("🔄", "Sort by Courier + SKU"),
-        ("📅", "Schedule pickup"),
-        ("📄", "Generate manifest"),
-        ("💾", "Save documents"),
-    ]
-    
-    step_container = st.container()
+    # Single status box
+    status_box = st.empty()
     progress = st.progress(0)
-    status_text = st.empty()
-    result_container = st.empty()
+    result_box = st.empty()
     
-    def update_steps(current_step, statuses):
-        html = ""
-        for i, (icon, name) in enumerate(steps):
-            if i < current_step:
-                cls = "step-done"
-                mark = "✅"
-            elif i == current_step:
-                cls = "step-active"
-                mark = "⏳"
-            else:
-                cls = "step-pending"
-                mark = "⬜"
-            extra = f" — {statuses.get(i, '')}" if statuses.get(i) else ""
-            html += f'<div class="step-item {cls}">{mark} {icon} {name}{extra}</div>'
-        step_container.markdown(html, unsafe_allow_html=True)
-    
-    statuses = {}
+    def show_status(icon, message, pct):
+        status_box.markdown(f"""
+            <div style="background: rgba(88, 166, 255, 0.1); border: 1px solid #30363d; 
+                        border-radius: 10px; padding: 20px; text-align: center;">
+                <div style="font-size: 32px; margin-bottom: 10px;">{icon}</div>
+                <div style="color: #fff; font-size: 16px;">{message}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        progress.progress(pct)
     
     try:
         email, pwd = get_shiprocket_credentials()
         
-        # Step 0: Login
-        update_steps(0, statuses)
-        progress.progress(10)
-        status_text.info("🔐 Logging in to Shiprocket...")
+        # Step 1: Login
+        show_status("🔐", "Logging in to Shiprocket...", 10)
         auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=15)
         if not auth_r.ok:
-            statuses[0] = "Failed!"
-            update_steps(0, statuses)
-            result_container.error("❌ Login failed")
+            status_box.empty()
+            result_box.error("❌ Login failed")
             return
         token = auth_r.json().get("token")
         headers = {"Authorization": f"Bearer {token}"}
-        statuses[0] = "Connected"
         
-        # Step 1: Fetch orders
-        update_steps(1, statuses)
-        progress.progress(20)
-        status_text.info("📦 Fetching NEW orders...")
+        # Step 2: Fetch orders
+        show_status("📦", "Fetching NEW orders...", 20)
         orders_r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={"per_page": 200}, timeout=30)
         orders = orders_r.json().get("data", [])
         new_orders = [o for o in orders if o.get("status") == "NEW"]
         
         if not new_orders:
-            statuses[1] = "0 orders"
-            update_steps(1, statuses)
-            result_container.warning("📭 No NEW orders to ship!")
+            status_box.empty()
             progress.progress(100)
+            result_box.warning("📭 No NEW orders to ship!")
             return
         
-        statuses[1] = f"{len(new_orders)} found"
-        
-        # Step 2: Ship orders
-        update_steps(2, statuses)
-        progress.progress(30)
+        # Step 3: Ship orders
         shipped_ids = []
         shipped_awbs = []
-        
         for i, order in enumerate(new_orders):
-            status_text.info(f"🚚 Shipping order {i+1}/{len(new_orders)}...")
+            show_status("🚚", f"Shipping order {i+1}/{len(new_orders)}...", 30 + int((i+1)/len(new_orders)*20))
             try:
                 shipments = order.get("shipments", [])
                 if shipments:
                     shipment_id = shipments[0].get("id")
                     if shipment_id:
-                        awb_r = requests.post(
-                            f"{SHIPROCKET_API}/courier/assign/awb",
-                            headers=headers,
-                            json={"shipment_id": shipment_id},
-                            timeout=15
-                        )
+                        awb_r = requests.post(f"{SHIPROCKET_API}/courier/assign/awb", headers=headers, json={"shipment_id": shipment_id}, timeout=15)
                         if awb_r.ok and awb_r.json().get("awb_assign_status") == 1:
                             awb = awb_r.json().get("response", {}).get("data", {}).get("awb_code", "")
                             shipped_ids.append(shipment_id)
                             shipped_awbs.append(awb)
             except:
                 pass
-            progress.progress(30 + int((i+1)/len(new_orders)*20))
-        
-        statuses[2] = f"{len(shipped_ids)}/{len(new_orders)} shipped"
         
         if not shipped_ids:
-            update_steps(2, statuses)
-            result_container.warning("⚠️ No orders were shipped")
+            status_box.empty()
             progress.progress(100)
+            result_box.warning("⚠️ No orders were shipped")
             return
         
-        # Step 3: Generate labels
-        update_steps(3, statuses)
-        progress.progress(55)
-        status_text.info("🏷️ Generating labels...")
-        label_r = requests.post(
-            f"{SHIPROCKET_API}/courier/generate/label",
-            headers=headers,
-            json={"shipment_id": [str(sid) for sid in shipped_ids]},
-            timeout=60
-        )
+        # Step 4: Generate & sort labels
+        show_status("🏷️", "Generating labels...", 55)
+        label_r = requests.post(f"{SHIPROCKET_API}/courier/generate/label", headers=headers, json={"shipment_id": [str(sid) for sid in shipped_ids]}, timeout=60)
         label_url = label_r.json().get("label_url", "") if label_r.ok else ""
-        statuses[3] = "Done" if label_url else "No URL"
-        
-        # Step 4: Sort labels
-        update_steps(4, statuses)
-        progress.progress(65)
-        status_text.info("🔄 Sorting labels by Courier + SKU...")
         
         zip_content = None
         today = datetime.now().strftime("%Y-%m-%d")
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
         
         if label_url:
+            show_status("🔄", "Sorting labels...", 65)
             pdf_r = requests.get(label_url, timeout=60)
             if pdf_r.ok:
                 pdf_data = BytesIO(pdf_r.content)
                 reader = PdfReader(pdf_data)
-                
                 courier_pages = {}
                 for page in reader.pages:
                     text = page.extract_text() or ""
@@ -2056,40 +1991,23 @@ def ship_orders_dialog():
                         writer.write(pdf_buffer)
                         pdf_buffer.seek(0)
                         zf.writestr(f"{today}_{key}.pdf", pdf_buffer.read())
-                
                 zip_buffer.seek(0)
                 zip_content = zip_buffer.getvalue()
-                statuses[4] = f"{len(courier_pages)} groups"
         
         # Step 5: Schedule Pickup
-        update_steps(5, statuses)
-        progress.progress(80)
-        status_text.info("📅 Scheduling pickup...")
+        show_status("📅", "Scheduling pickup...", 80)
         pickup_success = 0
         for sid in shipped_ids:
             try:
-                pickup_r = requests.post(
-                    f"{SHIPROCKET_API}/courier/generate/pickup",
-                    headers=headers,
-                    json={"shipment_id": [str(sid)]},
-                    timeout=15
-                )
+                pickup_r = requests.post(f"{SHIPROCKET_API}/courier/generate/pickup", headers=headers, json={"shipment_id": [str(sid)]}, timeout=15)
                 if pickup_r.ok:
                     pickup_success += 1
             except:
                 pass
-        statuses[5] = f"{pickup_success}/{len(shipped_ids)}"
         
         # Step 6: Generate manifest
-        update_steps(6, statuses)
-        progress.progress(90)
-        status_text.info("📄 Generating manifest...")
-        manifest_r = requests.post(
-            f"{SHIPROCKET_API}/manifests/generate",
-            headers=headers,
-            json={"shipment_id": [str(sid) for sid in shipped_ids]},
-            timeout=30
-        )
+        show_status("📄", "Generating manifest...", 90)
+        manifest_r = requests.post(f"{SHIPROCKET_API}/manifests/generate", headers=headers, json={"shipment_id": [str(sid) for sid in shipped_ids]}, timeout=30)
         manifest_content = None
         if manifest_r.ok:
             manifest_url = manifest_r.json().get("manifest_url", "")
@@ -2097,64 +2015,49 @@ def ship_orders_dialog():
                 manifest_pdf = requests.get(manifest_url, timeout=30)
                 if manifest_pdf.ok:
                     manifest_content = manifest_pdf.content
-                    statuses[6] = "Done"
         
         # Step 7: Save documents
-        update_steps(7, statuses)
-        progress.progress(95)
-        status_text.info("💾 Saving documents...")
-        
+        show_status("💾", "Saving documents...", 95)
         if zip_content:
             save_document(f"{timestamp}_labels_sorted.zip", zip_content, doc_type="labels")
         if manifest_content:
             save_document(f"{timestamp}_manifest.pdf", manifest_content, doc_type="manifest")
-        statuses[7] = "Saved"
         
-        # Update batch history
+        # Update records
         script_dir = os.path.dirname(os.path.abspath(__file__))
         batch_file = os.path.join(script_dir, "public", "batches_history.json")
-        batch_data = {
-            "timestamp": datetime.now().isoformat(),
-            "date": today,
-            "time": datetime.now().strftime("%I:%M %p"),
-            "display_time": datetime.now().strftime("%I:%M %p"),
-            "total_orders": len(new_orders),
-            "shipped": len(shipped_ids),
-            "failed": len(new_orders) - len(shipped_ids),
-            "awbs": shipped_awbs[:10],
-            "source": "ship_orders_now"
-        }
+        batch_data = {"timestamp": datetime.now().isoformat(), "date": today, "time": datetime.now().strftime("%I:%M %p"), "display_time": datetime.now().strftime("%I:%M %p"), "total_orders": len(new_orders), "shipped": len(shipped_ids), "failed": len(new_orders) - len(shipped_ids), "awbs": shipped_awbs[:10], "source": "ship_orders_now"}
         with open(batch_file, "r") as f:
             batches_data = json.load(f)
         batches_data["batches"].insert(0, batch_data)
         with open(batch_file, "w") as f:
             json.dump(batches_data, f, indent=2)
         
-        # Add activity
         with open(os.path.join(script_dir, "local_activity.json"), "r") as f:
             activities = json.load(f)
-        activities.insert(0, {
-            "text": f"🚀 Shipped {len(shipped_ids)} orders, pickup scheduled, labels sorted!",
-            "timestamp": datetime.now().isoformat(),
-            "type": "green"
-        })
+        activities.insert(0, {"text": f"🚀 Shipped {len(shipped_ids)} orders!", "timestamp": datetime.now().isoformat(), "type": "green"})
         with open(os.path.join(script_dir, "local_activity.json"), "w") as f:
             json.dump(activities[:20], f, indent=2)
         
         # Complete!
-        update_steps(8, statuses)
         progress.progress(100)
-        status_text.empty()
-        result_container.success(f"🎉 **Shipped {len(shipped_ids)} orders!**\n\nPickup scheduled, manifest generated, labels sorted!")
+        status_box.markdown(f"""
+            <div style="background: rgba(46, 160, 67, 0.2); border: 1px solid #3fb950; 
+                        border-radius: 10px; padding: 20px; text-align: center;">
+                <div style="font-size: 40px; margin-bottom: 10px;">🎉</div>
+                <div style="color: #3fb950; font-size: 18px; font-weight: 600;">Shipped {len(shipped_ids)} orders!</div>
+                <div style="color: #888; font-size: 14px; margin-top: 8px;">Pickup scheduled • Labels sorted • Manifest ready</div>
+            </div>
+        """, unsafe_allow_html=True)
         
-        if st.button("✅ Done - View Documents", type="primary", use_container_width=True):
+        if st.button("✅ Done", type="primary", use_container_width=True):
             st.session_state.go_to_documents = True
             st.cache_data.clear()
             st.rerun()
         
     except Exception as e:
-        result_container.error(f"❌ Error: {str(e)}")
-        progress.progress(100)
+        status_box.empty()
+        result_box.error(f"❌ Error: {str(e)}")
 
 # Trigger dialog
 if st.session_state.get("ship_now"):
