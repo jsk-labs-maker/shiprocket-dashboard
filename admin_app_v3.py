@@ -990,7 +990,48 @@ with st.sidebar:
             st.rerun()
     with col2:
         if st.button("📥", help="Download Labels"):
-            st.toast("Opening download...")
+            # Get latest shipments and download labels
+            try:
+                email, pwd = get_shiprocket_credentials()
+                auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=10)
+                if auth_r.ok:
+                    token = auth_r.json().get("token")
+                    headers = {"Authorization": f"Bearer {token}"}
+                    
+                    # Get recent shipments
+                    ship_r = requests.get(f"{SHIPROCKET_API}/shipments", headers=headers, params={"per_page": 10}, timeout=15)
+                    if ship_r.ok:
+                        shipments = ship_r.json().get("data", [])
+                        if shipments:
+                            # Get shipment IDs for label generation
+                            shipment_ids = [str(s.get("id")) for s in shipments[:5] if s.get("id")]
+                            if shipment_ids:
+                                # Generate labels
+                                label_r = requests.post(
+                                    f"{SHIPROCKET_API}/courier/generate/label",
+                                    headers=headers,
+                                    json={"shipment_id": shipment_ids},
+                                    timeout=30
+                                )
+                                if label_r.ok:
+                                    label_url = label_r.json().get("label_url", "")
+                                    if label_url:
+                                        st.markdown(f"[📥 **Download Labels PDF**]({label_url})")
+                                        st.toast("✅ Labels ready!", icon="📥")
+                                    else:
+                                        st.warning("No label URL returned")
+                                else:
+                                    st.error(f"Label generation failed: {label_r.status_code}")
+                            else:
+                                st.warning("No shipments found")
+                        else:
+                            st.warning("No recent shipments")
+                    else:
+                        st.error("Failed to fetch shipments")
+                else:
+                    st.error("Login failed")
+            except Exception as e:
+                st.error(f"Error: {str(e)[:50]}")
     
     # Connection status
     status_color = "🟢" if sr_data['connected'] else "🔴"

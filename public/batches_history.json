@@ -1,18 +1,29 @@
 {
   "batches": [
     {
+      "timestamp": "2026-02-17T12:36:02.849511",
+      "date": "2026-02-17",
+      "time": "12:36 PM",
+      "display_time": "12:36 PM",
+      "total_orders": 1,
+      "shipped": 1,
+      "failed": 0,
+      "unshipped": 0,
+      "source": "ship_them_buddy",
+      "awbs": [
+        "284931134920552"
+      ]
+    },
+    {
       "timestamp": "2026-02-17T11:59:25.894774",
       "date": "2026-02-17",
       "time": "11:59 AM",
       "display_time": "11:59 AM",
-      "total_orders": 5,
-      "shipped": 4,
+      "total_orders": 3,
+      "shipped": 3,
       "failed": 0,
-      "unshipped": 1,
-      "source": "shiprocket_api",
-      "labels_sorted": {},
-      "zip_filename": null,
-      "manifest_filename": null
+      "unshipped": 0,
+      "source": "manual"
     },
     {
       "timestamp": "2026-02-16T20:52:42.381932",
