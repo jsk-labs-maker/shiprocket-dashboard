@@ -95,6 +95,107 @@ def refresh_data(days=30, from_date=None, to_date=None):
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(SCRIPT_DIR))
     return result.returncode == 0, result.stdout, result.stderr
 
+# === STATUS CATEGORIZATION (same as fetch_analytics.py) ===
+def categorize_status(status):
+    """Categorize status into 5 groups"""
+    status = str(status).upper().strip()
+    
+    # Check RTO first
+    if "RTO" in status or "RETURN" in status:
+        return "rto"
+    
+    # Delivered
+    if "DELIVERED" in status and "RTO" not in status and "UNDELIVERED" not in status:
+        return "delivered"
+    if status in ["COMPLETE", "FULFILLED"]:
+        return "delivered"
+    
+    # Undelivered
+    for s in ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED"]:
+        if s in status:
+            return "undelivered"
+    
+    # In-Transit
+    for s in ["SHIPPED", "IN TRANSIT", "IN-TRANSIT", "PICKED UP", "OUT FOR DELIVERY",
+              "REACHED AT DESTINATION", "DELIVERY DELAYED", "MISROUTED", "HANDOVER", "IN FLIGHT"]:
+        if s in status:
+            return "intransit"
+    
+    # Unshipped
+    for s in ["NEW", "INVOICED", "PENDING", "AWB ASSIGNED", "LABEL GENERATED", 
+              "PICKUP SCHEDULED", "PICKUP QUEUED", "MANIFEST GENERATED", "OUT FOR PICKUP", "SHIPMENT BOOKED"]:
+        if s in status:
+            return "unshipped"
+    
+    if "CANCEL" in status:
+        return "unshipped"
+    
+    return "intransit"
+
+def process_uploaded_csv(uploaded_file):
+    """Process uploaded Shiprocket CSV export"""
+    try:
+        df = pd.read_csv(uploaded_file)
+        
+        # Map common Shiprocket CSV column names
+        column_mapping = {
+            # Order ID variations
+            'Order ID': 'order_id', 'order_id': 'order_id', 'Order Id': 'order_id',
+            'Channel Order ID': 'order_id', 'channel_order_id': 'order_id',
+            # Date variations
+            'Created At': 'date', 'created_at': 'date', 'Order Date': 'date',
+            'order_date': 'date', 'Date': 'date',
+            # Status variations
+            'Status': 'status', 'status': 'status', 'Shipment Status': 'status',
+            'shipment_status': 'status', 'Current Status': 'status',
+            # SKU variations
+            'SKU': 'sku', 'sku': 'sku', 'Channel SKU': 'sku', 'channel_sku': 'sku',
+            'Product SKU': 'sku', 'product_sku': 'sku',
+            # AWB variations
+            'AWB': 'awb', 'awb': 'awb', 'AWB Code': 'awb', 'awb_code': 'awb',
+            'Tracking Number': 'awb',
+            # Courier variations
+            'Courier': 'courier', 'courier': 'courier', 'Courier Name': 'courier',
+            'courier_name': 'courier', 'Carrier': 'courier',
+            # Product name
+            'Product Name': 'product_name', 'product_name': 'product_name',
+            'Product': 'product_name', 'Item Name': 'product_name'
+        }
+        
+        # Rename columns
+        df = df.rename(columns=column_mapping)
+        
+        # Ensure required columns exist
+        required = ['order_id', 'status']
+        for col in required:
+            if col not in df.columns:
+                return None, f"Missing required column: {col}"
+        
+        # Fill missing optional columns
+        if 'date' not in df.columns:
+            df['date'] = ''
+        if 'sku' not in df.columns:
+            df['sku'] = 'Unknown'
+        if 'awb' not in df.columns:
+            df['awb'] = ''
+        if 'courier' not in df.columns:
+            df['courier'] = ''
+        if 'product_name' not in df.columns:
+            df['product_name'] = ''
+        
+        # Clean date column
+        df['date'] = df['date'].astype(str).str[:10]
+        
+        # Categorize status
+        df['category'] = df['status'].apply(categorize_status)
+        
+        # Select final columns
+        result_df = df[['order_id', 'date', 'status', 'category', 'sku', 'product_name', 'awb', 'courier']].copy()
+        
+        return result_df, None
+    except Exception as e:
+        return None, str(e)
+
 # === HEADER ===
 st.markdown("# 📈 SKU Delivery Analytics")
 st.caption("Fast analytics with pre-processed data")
@@ -103,45 +204,109 @@ st.markdown("---")
 # === LOAD DATA ===
 df, stats = load_data()
 
-# === REFRESH CONTROLS ===
-st.markdown("### 🔄 Data Controls")
+# === DATA SOURCE TABS ===
+tab1, tab2 = st.tabs(["🔄 Fetch from API", "📤 Upload CSV"])
 
-col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+with tab1:
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
-with col1:
-    date_mode = st.radio("Mode", ["Preset", "Custom Days", "Date Range"], horizontal=True)
+    with col1:
+        date_mode = st.radio("Mode", ["Preset", "Custom Days", "Date Range"], horizontal=True)
 
-with col2:
-    if date_mode == "Preset":
-        days = st.selectbox("Period", [30, 60, 90, 180, 365], format_func=lambda x: f"Last {x} Days")
-    elif date_mode == "Custom Days":
-        days = st.number_input("Days", min_value=1, max_value=730, value=45, step=1)
-    else:
-        from_date = st.date_input("From", value=datetime.now() - timedelta(days=30))
+    with col2:
+        if date_mode == "Preset":
+            days = st.selectbox("Period", [30, 60, 90, 180, 365], format_func=lambda x: f"Last {x} Days")
+        elif date_mode == "Custom Days":
+            days = st.number_input("Days", min_value=1, max_value=730, value=45, step=1)
+        else:
+            from_date = st.date_input("From", value=datetime.now() - timedelta(days=30))
 
-with col3:
-    if date_mode == "Date Range":
-        to_date = st.date_input("To", value=datetime.now())
-    else:
+    with col3:
+        if date_mode == "Date Range":
+            to_date = st.date_input("To", value=datetime.now())
+        else:
+            st.write("")
+
+    with col4:
         st.write("")
+        if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
+            with st.spinner("⏳ Fetching data from Shiprocket..."):
+                if date_mode in ["Preset", "Custom Days"]:
+                    success, stdout, stderr = refresh_data(days=days)
+                else:
+                    success, stdout, stderr = refresh_data(
+                        from_date=from_date.strftime("%Y-%m-%d"),
+                        to_date=to_date.strftime("%Y-%m-%d")
+                    )
+                
+                if success:
+                    st.success("✅ Data refreshed!")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Error: {stderr}")
 
-with col4:
-    st.write("")
-    if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
-        with st.spinner("⏳ Fetching data from Shiprocket..."):
-            if date_mode in ["Preset", "Custom Days"]:
-                success, stdout, stderr = refresh_data(days=days)
-            else:
-                success, stdout, stderr = refresh_data(
-                    from_date=from_date.strftime("%Y-%m-%d"),
-                    to_date=to_date.strftime("%Y-%m-%d")
-                )
+with tab2:
+    st.markdown("Upload a CSV file exported from Shiprocket")
+    st.caption("Supports order exports with columns: Order ID, Status, SKU, AWB, Courier, Date")
+    
+    uploaded_file = st.file_uploader("Choose CSV file", type=['csv'], key="csv_upload")
+    
+    if uploaded_file is not None:
+        with st.spinner("📊 Processing CSV..."):
+            processed_df, error = process_uploaded_csv(uploaded_file)
             
-            if success:
-                st.success("✅ Data refreshed!")
-                st.rerun()
+            if error:
+                st.error(f"❌ Error: {error}")
             else:
-                st.error(f"❌ Error: {stderr}")
+                # Show preview
+                st.success(f"✅ Loaded {len(processed_df)} rows")
+                
+                with st.expander("📋 Preview Data", expanded=False):
+                    st.dataframe(processed_df.head(20), use_container_width=True, hide_index=True)
+                
+                # Show category breakdown
+                cat_counts = processed_df['category'].value_counts().to_dict()
+                st.markdown(f"""
+                **Categories found:**
+                - 📦 Unshipped: {cat_counts.get('unshipped', 0)}
+                - 🚚 In-Transit: {cat_counts.get('intransit', 0)}
+                - ✅ Delivered: {cat_counts.get('delivered', 0)}
+                - ↩️ RTO: {cat_counts.get('rto', 0)}
+                - ❌ Undelivered: {cat_counts.get('undelivered', 0)}
+                """)
+                
+                if st.button("💾 Save & Use This Data", type="primary", use_container_width=True):
+                    # Save to data files
+                    os.makedirs(DATA_DIR, exist_ok=True)
+                    
+                    # Save CSV
+                    processed_df.to_csv(CSV_FILE, index=False)
+                    
+                    # Calculate and save stats
+                    dates = processed_df['date'].dropna()
+                    dates = dates[dates != '']
+                    min_date = dates.min() if len(dates) > 0 else "N/A"
+                    max_date = dates.max() if len(dates) > 0 else "N/A"
+                    
+                    new_stats = {
+                        "total": len(processed_df),
+                        "unshipped": cat_counts.get('unshipped', 0),
+                        "intransit": cat_counts.get('intransit', 0),
+                        "delivered": cat_counts.get('delivered', 0),
+                        "rto": cat_counts.get('rto', 0),
+                        "undelivered": cat_counts.get('undelivered', 0),
+                        "skus": processed_df['sku'].nunique(),
+                        "from_date": str(min_date),
+                        "to_date": str(max_date),
+                        "updated_at": datetime.now().isoformat(),
+                        "source": "csv_upload"
+                    }
+                    
+                    with open(STATS_FILE, "w") as f:
+                        json.dump(new_stats, f, indent=2)
+                    
+                    st.success("✅ Data saved! Refreshing...")
+                    st.rerun()
 
 # Show data info
 if stats:
