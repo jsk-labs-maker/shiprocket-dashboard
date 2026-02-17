@@ -8,7 +8,7 @@ Built by Kluzo 😎 for JSK Labs
 """
 
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+# Removed: from streamlit_autorefresh import st_autorefresh (causes disruptive reloads)
 import requests
 from datetime import datetime, timedelta
 import json
@@ -23,8 +23,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Auto-refresh every 60 seconds (60000 ms)
-st_autorefresh(interval=60000, limit=None, key="auto_refresh")
+# Background refresh: Data caches refresh automatically (TTL=60s)
+# No disruptive page reloads - data refreshes when user interacts
 
 # === CONSTANTS ===
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jsk-labs-maker/shiprocket-dashboard/main/public"
@@ -1176,6 +1176,11 @@ with st.sidebar:
     if st.button("🚀 Ship Orders Now", use_container_width=True, type="primary"):
         st.session_state.ship_now = True
     
+    # Manual refresh button
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    
     st.markdown("---")
     
     # Debug: Show connection status
@@ -2076,9 +2081,4 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# === AUTO REFRESH (every 60 seconds) ===
-# Using meta refresh tag (works in Streamlit)
-st.markdown(
-    '<meta http-equiv="refresh" content="60">',
-    unsafe_allow_html=True
-)
+# Background refresh handled by cache TTL - no disruptive page reloads
