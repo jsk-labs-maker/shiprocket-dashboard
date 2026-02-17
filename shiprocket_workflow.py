@@ -182,19 +182,81 @@ def generate_manifest(token, shipment_ids):
     return None
 
 
+def find_duplicate_orders(orders):
+    """
+    Find duplicate orders by phone number.
+    Returns (duplicates_list, unique_list, duplicate_info)
+    """
+    from collections import defaultdict
+    
+    # Group orders by phone number
+    phone_groups = defaultdict(list)
+    
+    for order in orders:
+        # Get customer phone (try multiple fields)
+        phone = (
+            order.get("customer_phone") or 
+            order.get("billing_phone") or 
+            order.get("shipping_phone") or
+            ""
+        )
+        # Normalize phone (last 10 digits)
+        phone_clean = re.sub(r'\D', '', str(phone))[-10:] if phone else ""
+        
+        if phone_clean:
+            phone_groups[phone_clean].append(order)
+        else:
+            # No phone = treat as unique
+            phone_groups[f"no_phone_{order.get('id')}"].append(order)
+    
+    duplicates = []
+    unique = []
+    duplicate_info = []
+    
+    for phone, group in phone_groups.items():
+        if len(group) > 1:
+            # Multiple orders from same phone = duplicates
+            duplicates.extend(group)
+            customer_name = group[0].get("customer_name", "Unknown")
+            duplicate_info.append({
+                "phone": phone,
+                "customer": customer_name,
+                "count": len(group),
+                "order_ids": [o.get("id") for o in group]
+            })
+        else:
+            # Single order = unique
+            unique.extend(group)
+    
+    return duplicates, unique, duplicate_info
+
+
 def run_shipping_workflow():
     """
-    Run complete shipping workflow (Streamlit-compatible).
-    Returns dict with results.
+    Run complete shipping workflow with duplicate detection.
+    
+    Flow:
+    1. Fetch NEW orders
+    2. Find duplicates (same phone number)
+    3. Ship duplicates → Download labels → Save for Telegram
+    4. Ship remaining unique orders
+    5. Download all labels, schedule pickup, generate manifest
+    
+    Returns dict with results including duplicate_labels_pdf for Telegram.
     """
     result = {
         "total_orders": 0,
+        "duplicate_count": 0,
+        "unique_count": 0,
         "shipped": 0,
         "failed": 0,
         "skipped": 0,
         "pickup_scheduled": 0,
         "labels_downloaded": False,
         "manifest_generated": False,
+        "duplicate_labels_pdf": None,  # PDF bytes for duplicates (send to Telegram)
+        "duplicate_info": [],  # Details about duplicates
+        "all_labels_pdf": None,  # PDF bytes for all labels
         "errors": [],
         "details": []
     }
@@ -210,80 +272,143 @@ def run_shipping_workflow():
         result["total_orders"] = len(orders)
         
         if not orders:
-            result["errors"].append("No NEW orders found (all orders are either shipped, canceled, or not ready)")
+            result["errors"].append("No NEW orders found")
             return result
         
         result["details"].append(f"Found {len(orders)} NEW orders")
         
-        # Ship each order
-        result["details"].append("🚀 Shipping orders...")
-        shipped_ids = []
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 1: Find duplicate orders (same phone number)
+        # ═══════════════════════════════════════════════════════════════
+        result["details"].append("🔍 Checking for duplicate orders...")
+        duplicates, unique_orders, duplicate_info = find_duplicate_orders(orders)
         
-        for order in orders:
-            order_id = order.get("id")
-            
-            # Get shipment ID
-            shipments = order.get("shipments", [])
-            if not shipments:
-                result["skipped"] += 1
-                result["details"].append(f"  Order #{order_id}: ⏭️ Skipped (no shipment)")
-                continue
-            
-            shipment_id = shipments[0].get("id")
-            if not shipment_id:
-                result["skipped"] += 1
-                result["details"].append(f"  Order #{order_id}: ⏭️ Skipped (no shipment ID)")
-                continue
-            
-            # Try to ship
-            success, response = ship_order(token, shipment_id)
-            
-            if success:
-                result["shipped"] += 1
-                shipped_ids.append(shipment_id)
-                result["details"].append(f"  Order #{order_id}: ✅ Shipped")
-            else:
-                result["failed"] += 1
-                error_msg = str(response)[:80]
-                result["details"].append(f"  Order #{order_id}: ❌ Failed - {error_msg}")
+        result["duplicate_count"] = len(duplicates)
+        result["unique_count"] = len(unique_orders)
+        result["duplicate_info"] = duplicate_info
         
-        # If nothing shipped, stop here
-        if not shipped_ids:
-            result["errors"].append(f"Found {result['total_orders']} NEW orders but could not ship any")
+        if duplicates:
+            result["details"].append(f"⚠️ Found {len(duplicates)} DUPLICATE orders ({len(duplicate_info)} customers)")
+            for info in duplicate_info:
+                result["details"].append(f"  📱 {info['phone']} ({info['customer']}): {info['count']} orders")
+        else:
+            result["details"].append("✅ No duplicates found")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 2: Ship DUPLICATE orders first
+        # ═══════════════════════════════════════════════════════════════
+        duplicate_shipped_ids = []
+        
+        if duplicates:
+            result["details"].append("🚀 Shipping DUPLICATE orders first...")
+            
+            for order in duplicates:
+                order_id = order.get("id")
+                shipments = order.get("shipments", [])
+                
+                if not shipments:
+                    result["skipped"] += 1
+                    continue
+                
+                shipment_id = shipments[0].get("id")
+                if not shipment_id:
+                    result["skipped"] += 1
+                    continue
+                
+                success, response = ship_order(token, shipment_id)
+                
+                if success:
+                    result["shipped"] += 1
+                    duplicate_shipped_ids.append(shipment_id)
+                    result["details"].append(f"  Order #{order_id}: ✅ Shipped (DUPLICATE)")
+                else:
+                    result["failed"] += 1
+                    result["details"].append(f"  Order #{order_id}: ❌ Failed")
+            
+            # Download labels for duplicates only
+            if duplicate_shipped_ids:
+                result["details"].append(f"📄 Downloading labels for {len(duplicate_shipped_ids)} duplicates...")
+                try:
+                    duplicate_labels = download_labels(token, duplicate_shipped_ids)
+                    if duplicate_labels:
+                        result["duplicate_labels_pdf"] = duplicate_labels
+                        result["details"].append("  ✅ Duplicate labels ready for Telegram")
+                except Exception as e:
+                    result["details"].append(f"  ❌ Duplicate labels error: {str(e)[:50]}")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 3: Ship UNIQUE orders
+        # ═══════════════════════════════════════════════════════════════
+        unique_shipped_ids = []
+        
+        if unique_orders:
+            result["details"].append(f"🚀 Shipping {len(unique_orders)} UNIQUE orders...")
+            
+            for order in unique_orders:
+                order_id = order.get("id")
+                shipments = order.get("shipments", [])
+                
+                if not shipments:
+                    result["skipped"] += 1
+                    continue
+                
+                shipment_id = shipments[0].get("id")
+                if not shipment_id:
+                    result["skipped"] += 1
+                    continue
+                
+                success, response = ship_order(token, shipment_id)
+                
+                if success:
+                    result["shipped"] += 1
+                    unique_shipped_ids.append(shipment_id)
+                    result["details"].append(f"  Order #{order_id}: ✅ Shipped")
+                else:
+                    result["failed"] += 1
+                    result["details"].append(f"  Order #{order_id}: ❌ Failed")
+        
+        # All shipped IDs (duplicates + unique)
+        all_shipped_ids = duplicate_shipped_ids + unique_shipped_ids
+        
+        if not all_shipped_ids:
+            result["errors"].append("Could not ship any orders")
             return result
         
-        result["details"].append(f"✅ Shipped {len(shipped_ids)} orders")
+        result["details"].append(f"✅ Total shipped: {len(all_shipped_ids)} orders")
         
-        # Download labels
-        result["details"].append("📄 Downloading labels...")
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 4: Download ALL labels
+        # ═══════════════════════════════════════════════════════════════
+        result["details"].append("📄 Downloading ALL labels...")
         try:
-            labels_pdf = download_labels(token, shipped_ids)
-            if labels_pdf:
+            all_labels = download_labels(token, all_shipped_ids)
+            if all_labels:
+                result["all_labels_pdf"] = all_labels
                 result["labels_downloaded"] = True
-                result["details"].append("  ✅ Labels downloaded")
-            else:
-                result["details"].append("  ⚠️ Labels download failed")
+                result["details"].append("  ✅ All labels downloaded")
         except Exception as e:
             result["details"].append(f"  ❌ Labels error: {str(e)[:50]}")
         
-        # Schedule pickup (one by one)
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 5: Schedule pickup (one by one)
+        # ═══════════════════════════════════════════════════════════════
         result["details"].append("🚚 Scheduling pickup...")
         try:
-            pickup_count = schedule_pickup(token, shipped_ids)
+            pickup_count = schedule_pickup(token, all_shipped_ids)
             result["pickup_scheduled"] = pickup_count
-            result["details"].append(f"  ✅ Pickup scheduled for {pickup_count}/{len(shipped_ids)} shipments")
+            result["details"].append(f"  ✅ Pickup scheduled: {pickup_count}/{len(all_shipped_ids)}")
         except Exception as e:
             result["details"].append(f"  ❌ Pickup error: {str(e)[:50]}")
         
-        # Generate manifest
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 6: Generate manifest
+        # ═══════════════════════════════════════════════════════════════
         result["details"].append("📋 Generating manifest...")
         try:
-            manifest_pdf = generate_manifest(token, shipped_ids)
-            if manifest_pdf:
+            manifest = generate_manifest(token, all_shipped_ids)
+            if manifest:
                 result["manifest_generated"] = True
                 result["details"].append("  ✅ Manifest generated")
-            else:
-                result["details"].append("  ⚠️ Manifest generation failed")
         except Exception as e:
             result["details"].append(f"  ❌ Manifest error: {str(e)[:50]}")
         
