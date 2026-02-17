@@ -1333,23 +1333,12 @@ st.markdown("""
 
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
-def render_task_card(task, col_key):
-    """Render a task card with edit/delete buttons."""
-    import time
+def build_task_html(task):
+    """Build HTML for a single task card."""
     priority = task.get("priority", "medium")
-    task_id = task.get("id", 0)
-    tap_key = f"tap_{task_id}_{col_key}"
-    
-    # Priority dot color
     pri_dot = {"high": "red", "medium": "orange", "low": "green"}.get(priority, "orange")
-    
-    # Check if in "confirm delete" state
-    pending_delete = st.session_state.get(tap_key, 0)
-    is_pending = (time.time() - pending_delete) < 3 if pending_delete else False
-    card_border = "#f85149" if is_pending else "#30363d"
-    
-    st.markdown(f"""
-    <div class="task" style="border-color: {card_border};">
+    return f"""
+    <div class="task">
         <div class="task-left">
             <div class="t-dot {pri_dot}"></div>
             <span class="t-text">{task.get('title', 'Task')}</span>
@@ -1359,81 +1348,60 @@ def render_task_card(task, col_key):
             <span class="task-btn delete">●</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+def build_kanban_column(col_type, title, tasks, dot_class, empty_msg):
+    """Build complete HTML for a kanban column."""
+    tasks_html = ""
+    if tasks:
+        for t in tasks[:10]:  # Limit to 10 tasks
+            tasks_html += build_task_html(t)
+        if len(tasks) > 10:
+            tasks_html += f'<div class="empty-state">+ {len(tasks) - 10} more</div>'
+    else:
+        tasks_html = f'<div class="empty-state">{empty_msg}</div>'
     
-    # Hidden delete button
-    if st.button("×", key=f"del_{task_id}_{col_key}", help="Delete task"):
-        if is_pending:
-            st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task_id]
-            save_local_tasks(st.session_state.kanban_tasks)
-            st.session_state[tap_key] = 0
-            st.rerun()
-        else:
-            st.session_state[tap_key] = time.time()
-            st.toast("Tap again to confirm delete", icon="⚠️")
-            st.rerun()
+    return f"""
+    <div class="kanban-col {col_type}">
+        <div class="kanban-header">
+            <span class="kanban-header-pill {col_type}">
+                <span class="k-dot {dot_class}"></span> {title} ({len(tasks)})
+            </span>
+        </div>
+        <div class="kanban-tasks">
+            {tasks_html}
+        </div>
+    </div>
+    """
 
 with c1:
-    st.markdown(f"""
-    <div class="kanban-col todo">
-        <div class="kanban-header">
-            <span class="kanban-header-pill todo"><span class="k-dot orange"></span> TO DO ({len(kanban_todo)})</span>
-        </div>
-        <div class="kanban-tasks">
-    """, unsafe_allow_html=True)
-    if kanban_todo:
-        for t in kanban_todo:
-            render_task_card(t, "todo")
-    else:
-        st.markdown('<div class="empty-state">✨ No pending tasks</div>', unsafe_allow_html=True)
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown(build_kanban_column("todo", "TO DO", kanban_todo, "orange", "✨ No pending tasks"), unsafe_allow_html=True)
 
 with c2:
-    st.markdown(f"""
-    <div class="kanban-col doing">
-        <div class="kanban-header">
-            <span class="kanban-header-pill doing"><span class="k-dot blue"></span> IN PROGRESS ({len(kanban_doing)})</span>
-        </div>
-        <div class="kanban-tasks">
-    """, unsafe_allow_html=True)
-    if kanban_doing:
-        for t in kanban_doing:
-            render_task_card(t, "doing")
-    else:
-        st.markdown('<div class="empty-state">🎯 No tasks in progress</div>', unsafe_allow_html=True)
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown(build_kanban_column("doing", "IN PROGRESS", kanban_doing, "blue", "🎯 No tasks in progress"), unsafe_allow_html=True)
 
 with c3:
-    st.markdown(f"""
-    <div class="kanban-col done">
-        <div class="kanban-header">
-            <span class="kanban-header-pill done"><span class="k-dot green"></span> DONE ({len(kanban_done)})</span>
-        </div>
-        <div class="kanban-tasks">
-    """, unsafe_allow_html=True)
-    if kanban_done:
-        for t in kanban_done:
-            render_task_card(t, "done")
-    else:
-        st.markdown('<div class="empty-state">No completed tasks</div>', unsafe_allow_html=True)
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown(build_kanban_column("done", "DONE", kanban_done, "green", "No completed tasks"), unsafe_allow_html=True)
 
 with c4:
-    st.markdown(f"""
-    <div class="kanban-col archive">
-        <div class="kanban-header">
-            <span class="kanban-header-pill archive"><span class="k-dot gray"></span> ARCHIVE ({len(kanban_archive)})</span>
-        </div>
-        <div class="kanban-tasks">
-    """, unsafe_allow_html=True)
-    if kanban_archive:
-        for t in kanban_archive[:5]:
-            render_task_card(t, "archive")
-        if len(kanban_archive) > 5:
-            st.markdown(f'<div class="empty-state">+ {len(kanban_archive) - 5} more</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="empty-state">No archived tasks</div>', unsafe_allow_html=True)
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown(build_kanban_column("archive", "ARCHIVE", kanban_archive, "gray", "No archived tasks"), unsafe_allow_html=True)
+
+# Task management buttons (outside the columns)
+st.markdown("<br>", unsafe_allow_html=True)
+tcol1, tcol2, tcol3, tcol4 = st.columns(4, gap="small")
+with tcol1:
+    with st.expander("➕ Add Task"):
+        new_title = st.text_input("Task title", key="new_task_title", placeholder="Enter task...")
+        new_priority = st.selectbox("Priority", ["high", "medium", "low"], index=1, key="new_task_pri")
+        if st.button("Add Task", key="add_task_btn", use_container_width=True):
+            if new_title:
+                new_id = max([t.get("id", 0) for t in st.session_state.kanban_tasks] + [0]) + 1
+                st.session_state.kanban_tasks.append({
+                    "id": new_id, "title": new_title, "status": "todo", 
+                    "priority": new_priority, "category": "other", "desc": ""
+                })
+                save_local_tasks(st.session_state.kanban_tasks)
+                st.rerun()
 
 
 # === MIDDLE SECTION: Activity + Summary ===
