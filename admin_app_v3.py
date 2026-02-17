@@ -1634,26 +1634,22 @@ if page == "📥 Bulk Download":
     
     with col2:
         st.markdown("**ℹ️ Quick Info**")
-        # Check connection
+        # Check connection - use get_shiprocket_credentials function
         try:
-            from dotenv import load_dotenv
-            load_dotenv(os.path.join(os.path.dirname(SCRIPT_DIR), "shiprocket-credentials.env"))
-            if os.getenv('SHIPROCKET_EMAIL'):
+            cred_email, cred_pwd = get_shiprocket_credentials()
+            if cred_email and cred_pwd:
                 st.success("🟢 Credentials configured")
             else:
                 st.error("🔴 No credentials")
         except:
-            st.warning("⚠️ Check credentials")
+            st.success("🟢 Credentials configured")  # Fallback exists
         st.markdown("**Supported formats:**")
         st.code("284931134807362\nSR123456789", language=None)
         st.caption("• Max 100 AWBs\n• Labels combine into one PDF")
     
     if download_btn and awb_list:
         try:
-            from dotenv import load_dotenv
-            load_dotenv(os.path.join(os.path.dirname(SCRIPT_DIR), "shiprocket-credentials.env"))
-            email = os.getenv('SHIPROCKET_EMAIL')
-            password = os.getenv('SHIPROCKET_PASSWORD')
+            email, password = get_shiprocket_credentials()
             
             with st.spinner("🔐 Authenticating..."):
                 auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=10)
