@@ -1501,15 +1501,101 @@ if page == "📈 Analytics":
                 days = st.number_input("Days", min_value=1, max_value=730, value=60)
         with col3:
             if st.button("🔄 Refresh Data", type="primary", use_container_width=True):
-                import subprocess
-                script_path = os.path.join(SCRIPT_DIR, "fetch_analytics.py")
                 with st.spinner("⏳ Fetching from Shiprocket..."):
-                    result = subprocess.run(["python3", script_path, "--days", str(days)], capture_output=True, text=True, cwd=SCRIPT_DIR)
-                    if result.returncode == 0:
-                        st.success("✅ Data refreshed!")
+                    try:
+                        # Get credentials
+                        email, pwd = get_shiprocket_credentials()
+                        
+                        # Login
+                        auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=30)
+                        if not auth_r.ok:
+                            st.error("❌ Login failed")
+                            st.stop()
+                        
+                        token = auth_r.json().get("token")
+                        headers = {"Authorization": f"Bearer {token}"}
+                        
+                        # Calculate date range
+                        from datetime import timedelta
+                        to_date = datetime.now().strftime("%Y-%m-%d")
+                        from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+                        
+                        # Fetch orders
+                        all_orders = []
+                        page = 1
+                        progress = st.progress(0)
+                        status_text = st.empty()
+                        
+                        while page <= 50:  # Max 50 pages
+                            status_text.text(f"Fetching page {page}... ({len(all_orders)} orders)")
+                            progress.progress(min(page / 20, 1.0))
+                            
+                            r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={
+                                "per_page": 200, "page": page, "from": from_date, "to": to_date
+                            }, timeout=60)
+                            
+                            if not r.ok:
+                                break
+                            
+                            orders = r.json().get("data", [])
+                            if not orders:
+                                break
+                            
+                            all_orders.extend(orders)
+                            page += 1
+                        
+                        progress.empty()
+                        status_text.empty()
+                        
+                        if not all_orders:
+                            st.warning("No orders found")
+                            st.stop()
+                        
+                        # Process orders
+                        rows = []
+                        for order in all_orders:
+                            shipments = order.get("shipments", [])
+                            shipment = shipments[0] if shipments else {}
+                            status = shipment.get("status", order.get("status", ""))
+                            if isinstance(status, int):
+                                status = str(status)
+                            
+                            for product in order.get("products", [{}]):
+                                sku = product.get("channel_sku") or product.get("sku") or "Unknown"
+                                rows.append({
+                                    "order_id": order.get("channel_order_id", order.get("id", "")),
+                                    "date": (order.get("created_at", "") or "")[:10],
+                                    "status": status,
+                                    "category": categorize_status(status),
+                                    "sku": sku,
+                                    "awb": shipment.get("awb", ""),
+                                    "courier": shipment.get("courier_name", "")
+                                })
+                        
+                        # Save to files
+                        os.makedirs(DATA_DIR, exist_ok=True)
+                        df = pd.DataFrame(rows)
+                        df.to_csv(CSV_FILE, index=False)
+                        
+                        cat_counts = df['category'].value_counts().to_dict()
+                        new_stats = {
+                            "total": len(df),
+                            "unshipped": cat_counts.get('unshipped', 0),
+                            "intransit": cat_counts.get('intransit', 0),
+                            "delivered": cat_counts.get('delivered', 0),
+                            "rto": cat_counts.get('rto', 0),
+                            "undelivered": cat_counts.get('undelivered', 0),
+                            "from_date": from_date,
+                            "to_date": to_date,
+                            "updated_at": datetime.now().isoformat()
+                        }
+                        with open(STATS_FILE, "w") as f:
+                            json.dump(new_stats, f)
+                        
+                        st.success(f"✅ Fetched {len(all_orders)} orders!")
                         st.rerun()
-                    else:
-                        st.error(f"❌ Error: {result.stderr}")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
     
     with tab2:
         uploaded_file = st.file_uploader("Upload Shiprocket CSV export", type=['csv'])
