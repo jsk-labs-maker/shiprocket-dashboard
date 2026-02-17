@@ -44,7 +44,7 @@ st.markdown("""
 }
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 
-/* === SIDEBAR - Always Visible === */
+/* === SIDEBAR === */
 [data-testid="stSidebar"] { 
     background: linear-gradient(180deg, #0a0e14 0%, #111820 100%) !important;
     min-width: 280px !important;
@@ -53,6 +53,13 @@ st.markdown("""
 [data-testid="collapsedControl"], 
 button[kind="header"],
 [data-testid="stSidebarCollapseButton"] { display: none !important; }
+
+/* Hide sidebar navigation items (page links) */
+[data-testid="stSidebarNav"] { display: none !important; }
+[data-testid="stSidebarNavItems"] { display: none !important; }
+section[data-testid="stSidebar"] > div > div > div > div > ul { display: none !important; }
+.st-emotion-cache-1cypcdb { display: none !important; }
+[data-testid="stSidebarNavLink"] { display: none !important; }
 
 /* === GLASSMORPHISM === */
 .glass {
