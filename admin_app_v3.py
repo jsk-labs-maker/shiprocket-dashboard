@@ -1305,7 +1305,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # === PAGE SELECTOR ===
-page = st.radio("", ["🏠 Dashboard", "📁 Documents"], horizontal=True, label_visibility="collapsed")
+# Check if redirected from Ship workflow
+default_page = "📁 Documents" if st.session_state.get("go_to_documents") else "🏠 Dashboard"
+if st.session_state.get("go_to_documents"):
+    st.session_state.go_to_documents = False
+
+page = st.radio("", ["🏠 Dashboard", "📁 Documents"], horizontal=True, label_visibility="collapsed", index=0 if default_page == "🏠 Dashboard" else 1)
 
 if page == "📁 Documents":
     # === DOCUMENTS PAGE ===
@@ -1724,20 +1729,203 @@ with b2:
                 st.rerun()
 
 
-# === SHIP NOW HANDLER ===
+# === SHIP NOW HANDLER (Full Workflow) ===
 if st.session_state.get("ship_now"):
     st.session_state.ship_now = False
-    with st.spinner("🚀 Processing orders..."):
-        try:
-            from shiprocket_workflow import run_shipping_workflow
-            result = run_shipping_workflow()
-            if result.get("shipped", 0) > 0:
-                st.toast(f"✅ Shipped {result['shipped']} orders!", icon="🎉")
-                st.balloons()
-            else:
-                st.toast("No NEW orders to ship", icon="📭")
-        except Exception as e:
-            st.toast(f"Error: {str(e)}", icon="❌")
+    
+    import zipfile
+    import re
+    from io import BytesIO
+    from pypdf import PdfReader, PdfWriter
+    
+    progress = st.progress(0, text="🚀 Starting shipping workflow...")
+    status = st.empty()
+    
+    try:
+        email, pwd = get_shiprocket_credentials()
+        
+        # Step 1: Login
+        status.info("🔐 Logging in to Shiprocket...")
+        progress.progress(10, text="🔐 Logging in...")
+        auth_r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": pwd}, timeout=15)
+        if not auth_r.ok:
+            st.error("❌ Login failed")
+            st.stop()
+        token = auth_r.json().get("token")
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Step 2: Get NEW orders
+        status.info("📦 Fetching NEW orders...")
+        progress.progress(20, text="📦 Fetching orders...")
+        orders_r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={"per_page": 200}, timeout=30)
+        orders = orders_r.json().get("data", [])
+        new_orders = [o for o in orders if o.get("status") == "NEW"]
+        
+        if not new_orders:
+            status.warning("📭 No NEW orders to ship!")
+            progress.progress(100, text="✅ Complete - No orders")
+            st.stop()
+        
+        status.info(f"📦 Found {len(new_orders)} NEW orders")
+        
+        # Step 3: Ship each order
+        shipped_ids = []
+        shipped_awbs = []
+        progress.progress(30, text=f"🚚 Shipping {len(new_orders)} orders...")
+        
+        for i, order in enumerate(new_orders):
+            try:
+                shipments = order.get("shipments", [])
+                if shipments:
+                    shipment_id = shipments[0].get("id")
+                    if shipment_id:
+                        awb_r = requests.post(
+                            f"{SHIPROCKET_API}/courier/assign/awb",
+                            headers=headers,
+                            json={"shipment_id": shipment_id},
+                            timeout=15
+                        )
+                        if awb_r.ok and awb_r.json().get("awb_assign_status") == 1:
+                            awb = awb_r.json().get("response", {}).get("data", {}).get("awb_code", "")
+                            shipped_ids.append(shipment_id)
+                            shipped_awbs.append(awb)
+            except:
+                pass
+            progress.progress(30 + int((i+1)/len(new_orders)*20), text=f"🚚 Shipped {i+1}/{len(new_orders)}...")
+        
+        status.info(f"✅ Shipped {len(shipped_ids)} orders!")
+        
+        if not shipped_ids:
+            status.warning("⚠️ No orders were shipped")
+            progress.progress(100, text="✅ Complete")
+            st.stop()
+        
+        # Step 4: Generate labels
+        progress.progress(55, text="🏷️ Generating labels...")
+        status.info("🏷️ Generating labels...")
+        label_r = requests.post(
+            f"{SHIPROCKET_API}/courier/generate/label",
+            headers=headers,
+            json={"shipment_id": [str(sid) for sid in shipped_ids]},
+            timeout=60
+        )
+        
+        label_url = label_r.json().get("label_url", "") if label_r.ok else ""
+        
+        # Step 5: Download and sort labels
+        progress.progress(65, text="📥 Downloading labels...")
+        if label_url:
+            pdf_r = requests.get(label_url, timeout=60)
+            if pdf_r.ok:
+                status.info("🔄 Sorting labels by Courier + SKU...")
+                progress.progress(75, text="🔄 Sorting labels...")
+                
+                pdf_data = BytesIO(pdf_r.content)
+                reader = PdfReader(pdf_data)
+                
+                # Group by Courier + SKU
+                courier_pages = {}
+                for page in reader.pages:
+                    text = page.extract_text() or ""
+                    courier = "Unknown"
+                    for c in ["Ekart", "Delhivery", "Xpressbees", "BlueDart", "DTDC", "Shadowfax", "Ecom"]:
+                        if c.lower() in text.lower():
+                            courier = c
+                            break
+                    sku_match = re.search(r'SKU[:\s]*([A-Za-z0-9\-_]+)', text, re.IGNORECASE)
+                    sku = sku_match.group(1) if sku_match else "Unknown"
+                    key = f"{courier}_{sku}"
+                    if key not in courier_pages:
+                        courier_pages[key] = []
+                    courier_pages[key].append(page)
+                
+                # Create ZIP
+                zip_buffer = BytesIO()
+                today = datetime.now().strftime("%Y-%m-%d")
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+                
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for key, pages in courier_pages.items():
+                        writer = PdfWriter()
+                        for p in pages:
+                            writer.add_page(p)
+                        pdf_buffer = BytesIO()
+                        writer.write(pdf_buffer)
+                        pdf_buffer.seek(0)
+                        zf.writestr(f"{today}_{key}.pdf", pdf_buffer.read())
+                
+                zip_buffer.seek(0)
+                zip_content = zip_buffer.getvalue()
+                
+                # Save to Documents
+                progress.progress(85, text="💾 Saving to Documents...")
+                zip_filename = f"{timestamp}_labels_sorted.zip"
+                save_document(zip_filename, zip_content, doc_type="labels")
+        
+        # Step 6: Generate manifest
+        progress.progress(90, text="📄 Generating manifest...")
+        status.info("📄 Generating manifest...")
+        manifest_r = requests.post(
+            f"{SHIPROCKET_API}/manifests/generate",
+            headers=headers,
+            json={"shipment_id": [str(sid) for sid in shipped_ids]},
+            timeout=30
+        )
+        
+        if manifest_r.ok:
+            manifest_url = manifest_r.json().get("manifest_url", "")
+            if manifest_url:
+                manifest_pdf = requests.get(manifest_url, timeout=30)
+                if manifest_pdf.ok:
+                    manifest_filename = f"{timestamp}_manifest.pdf"
+                    save_document(manifest_filename, manifest_pdf.content, doc_type="manifest")
+        
+        # Step 7: Update batch history
+        progress.progress(95, text="📊 Updating records...")
+        batch_data = {
+            "timestamp": datetime.now().isoformat(),
+            "date": today,
+            "time": datetime.now().strftime("%I:%M %p"),
+            "display_time": datetime.now().strftime("%I:%M %p"),
+            "total_orders": len(new_orders),
+            "shipped": len(shipped_ids),
+            "failed": len(new_orders) - len(shipped_ids),
+            "awbs": shipped_awbs[:10],
+            "source": "ship_orders_now"
+        }
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        batch_file = os.path.join(script_dir, "public", "batches_history.json")
+        with open(batch_file, "r") as f:
+            batches_data = json.load(f)
+        batches_data["batches"].insert(0, batch_data)
+        with open(batch_file, "w") as f:
+            json.dump(batches_data, f, indent=2)
+        
+        # Step 8: Add activity
+        with open(os.path.join(script_dir, "local_activity.json"), "r") as f:
+            activities = json.load(f)
+        activities.insert(0, {
+            "text": f"🚀 Shipped {len(shipped_ids)} orders, labels sorted!",
+            "timestamp": datetime.now().isoformat(),
+            "type": "green"
+        })
+        with open(os.path.join(script_dir, "local_activity.json"), "w") as f:
+            json.dump(activities[:20], f, indent=2)
+        
+        # Complete!
+        progress.progress(100, text="✅ Complete!")
+        status.success(f"🎉 Shipped {len(shipped_ids)} orders! Labels sorted and saved to Documents.")
+        st.balloons()
+        
+        # Redirect to Documents page
+        st.session_state.go_to_documents = True
+        st.cache_data.clear()
+        st.rerun()
+        
+    except Exception as e:
+        status.error(f"❌ Error: {str(e)}")
+        progress.progress(100, text="❌ Failed")
 
 
 # === KEYBOARD SHORTCUTS HINT ===
