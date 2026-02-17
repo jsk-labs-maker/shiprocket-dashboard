@@ -1,11 +1,15 @@
 """
-📈 Analytics Page - JSK Labs Dashboard
+📈 Analytics Page - SKU Delivery Performance
 """
 
 import streamlit as st
-import pandas as pd
+import requests
 from datetime import datetime, timedelta
-import random
+from collections import defaultdict
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 st.set_page_config(
     page_title="Analytics | Kluzo",
@@ -28,187 +32,408 @@ st.markdown("""
     background: linear-gradient(180deg, #0a0e14 0%, #111820 100%) !important;
 }
 
-.metric-row {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 20px;
+.stat-card {
+    background: rgba(22, 27, 34, 0.9);
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    transition: all 0.2s ease;
 }
-.metric-card {
-    flex: 1;
-    background: linear-gradient(135deg, rgba(31, 111, 235, 0.15), rgba(139, 92, 246, 0.1));
-    border: 1px solid rgba(88, 166, 255, 0.2);
+.stat-card:hover {
+    border-color: #58a6ff;
+    transform: translateY(-2px);
+}
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.stat-label {
+    color: #8b949e;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+.stat-percent {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.intransit { border-left: 4px solid #58a6ff; }
+.intransit .stat-value { color: #58a6ff; }
+.intransit .stat-percent { color: #58a6ff; }
+
+.delivered { border-left: 4px solid #3fb950; }
+.delivered .stat-value { color: #3fb950; }
+.delivered .stat-percent { color: #3fb950; }
+
+.rto { border-left: 4px solid #f85149; }
+.rto .stat-value { color: #f85149; }
+.rto .stat-percent { color: #f85149; }
+
+.undelivered { border-left: 4px solid #f0883e; }
+.undelivered .stat-value { color: #f0883e; }
+.undelivered .stat-percent { color: #f0883e; }
+
+.total-card {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(139, 92, 246, 0.1));
+    border: 1px solid #58a6ff;
     border-radius: 12px;
     padding: 20px;
     text-align: center;
 }
-.metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #e6edf3;
-}
-.metric-label {
-    color: #8b949e;
-    font-size: 0.85rem;
-    margin-top: 4px;
-}
-.metric-change {
-    font-size: 0.8rem;
-    margin-top: 8px;
-}
-.metric-change.up { color: #3fb950; }
-.metric-change.down { color: #f85149; }
 </style>
 """, unsafe_allow_html=True)
 
+# === SHIPROCKET API ===
+SHIPROCKET_API = "https://apiv2.shiprocket.in/v1/external"
+
+def get_shiprocket_credentials():
+    email = os.getenv("SHIPROCKET_EMAIL", "openclawd12@gmail.com")
+    password = os.getenv("SHIPROCKET_PASSWORD", "Kluzo@1212")
+    return email, password
+
+@st.cache_data(ttl=300)
+def get_auth_token():
+    email, password = get_shiprocket_credentials()
+    try:
+        r = requests.post(f"{SHIPROCKET_API}/auth/login", json={"email": email, "password": password}, timeout=15)
+        return r.json().get("token", "") if r.ok else ""
+    except:
+        return ""
+
+@st.cache_data(ttl=300)
+def get_all_skus(token):
+    """Fetch all unique SKUs from orders"""
+    headers = {"Authorization": f"Bearer {token}"}
+    skus = set()
+    try:
+        # Fetch from orders (multiple pages)
+        for page in range(1, 6):  # First 5 pages
+            r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params={"per_page": 200, "page": page}, timeout=30)
+            if r.ok:
+                orders = r.json().get("data", [])
+                if not orders:
+                    break
+                for order in orders:
+                    for product in order.get("products", []):
+                        sku = product.get("sku", "")
+                        if sku:
+                            skus.add(sku)
+    except:
+        pass
+    return sorted(list(skus))
+
+def get_orders_by_date_range(token, from_date, to_date):
+    """Fetch orders within date range"""
+    headers = {"Authorization": f"Bearer {token}"}
+    all_orders = []
+    try:
+        for page in range(1, 20):  # Up to 20 pages
+            params = {
+                "per_page": 200,
+                "page": page,
+                "from": from_date.strftime("%Y-%m-%d"),
+                "to": to_date.strftime("%Y-%m-%d")
+            }
+            r = requests.get(f"{SHIPROCKET_API}/orders", headers=headers, params=params, timeout=30)
+            if r.ok:
+                orders = r.json().get("data", [])
+                if not orders:
+                    break
+                all_orders.extend(orders)
+            else:
+                break
+    except Exception as e:
+        st.error(f"Error fetching orders: {e}")
+    return all_orders
+
+def categorize_status(status):
+    """Group Shiprocket statuses into 4 categories"""
+    status = status.upper() if status else ""
+    
+    # In-Transit statuses
+    intransit_statuses = [
+        "PICKUP SCHEDULED", "PICKED UP", "IN TRANSIT", "OUT FOR DELIVERY",
+        "SHIPPED", "PICKUP GENERATED", "PICKUP QUEUED", "IN_TRANSIT",
+        "OUT_FOR_DELIVERY", "REACHED DESTINATION HUB", "PENDING"
+    ]
+    
+    # Delivered
+    delivered_statuses = ["DELIVERED", "COMPLETE"]
+    
+    # RTO (Return to Origin)
+    rto_statuses = [
+        "RTO INITIATED", "RTO IN TRANSIT", "RTO DELIVERED", "RTO",
+        "RTO_INITIATED", "RTO_INTRANSIT", "RTO_DELIVERED", "RETURNED"
+    ]
+    
+    # Undelivered / Failed
+    undelivered_statuses = [
+        "UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED",
+        "CANCELED", "CANCELLED", "UNDELIVERED_RETURNED"
+    ]
+    
+    for s in delivered_statuses:
+        if s in status:
+            return "delivered"
+    
+    for s in rto_statuses:
+        if s in status:
+            return "rto"
+    
+    for s in undelivered_statuses:
+        if s in status:
+            return "undelivered"
+    
+    for s in intransit_statuses:
+        if s in status:
+            return "intransit"
+    
+    # Default to in-transit if status contains transit keywords
+    if "TRANSIT" in status or "PICKUP" in status or "SHIPPED" in status:
+        return "intransit"
+    
+    return "intransit"  # Default
+
+def analyze_sku_performance(orders, selected_sku):
+    """Analyze delivery performance for selected SKU"""
+    stats = {
+        "intransit": 0,
+        "delivered": 0,
+        "rto": 0,
+        "undelivered": 0,
+        "total": 0
+    }
+    
+    order_details = []
+    
+    for order in orders:
+        # Check if order contains the selected SKU
+        order_skus = [p.get("sku", "") for p in order.get("products", [])]
+        
+        if selected_sku == "ALL" or selected_sku in order_skus:
+            # Get the order/shipment status
+            status = order.get("status", "")
+            
+            # Also check shipment status if available
+            shipments = order.get("shipments", [])
+            if shipments:
+                status = shipments[0].get("status", status)
+            
+            category = categorize_status(status)
+            stats[category] += 1
+            stats["total"] += 1
+            
+            # Store order details
+            order_details.append({
+                "order_id": order.get("channel_order_id", order.get("id", "")),
+                "date": order.get("created_at", "")[:10],
+                "status": status,
+                "category": category,
+                "awb": shipments[0].get("awb", "") if shipments else "",
+                "courier": shipments[0].get("courier_name", "") if shipments else ""
+            })
+    
+    return stats, order_details
+
 # === HEADER ===
-st.markdown("# 📈 Analytics Dashboard")
-st.caption("Shipping performance insights and trends")
+st.markdown("# 📈 SKU Delivery Analytics")
+st.caption("Track delivery performance by SKU with custom date range")
 st.markdown("---")
 
-# === Fetch data ===
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/jsk-labs-maker/shiprocket-dashboard/main/public"
+# === AUTH ===
+token = get_auth_token()
+if not token:
+    st.error("❌ Failed to connect to Shiprocket. Check credentials.")
+    st.stop()
 
-@st.cache_data(ttl=60)
-def get_batches():
-    import requests
-    try:
-        r = requests.get(f"{GITHUB_RAW_BASE}/batches_history.json", timeout=10)
-        return r.json().get("batches", []) if r.ok else []
-    except: return []
+# === FILTERS ===
+col1, col2, col3 = st.columns([2, 1, 1])
 
-batches = get_batches()
-total_shipped = sum(b.get('shipped', 0) for b in batches)
-total_failed = sum(b.get('failed', 0) for b in batches)
-success_rate = (total_shipped / (total_shipped + total_failed) * 100) if (total_shipped + total_failed) > 0 else 100
+with col1:
+    # SKU Dropdown with search
+    all_skus = get_all_skus(token)
+    sku_options = ["ALL"] + all_skus
+    selected_sku = st.selectbox(
+        "🔍 Select SKU",
+        options=sku_options,
+        index=0,
+        help="Search or select a SKU to analyze"
+    )
 
-# === BIG METRICS ROW ===
+with col2:
+    from_date = st.date_input(
+        "📅 From Date",
+        value=datetime.now() - timedelta(days=30),
+        max_value=datetime.now()
+    )
+
+with col3:
+    to_date = st.date_input(
+        "📅 To Date",
+        value=datetime.now(),
+        max_value=datetime.now()
+    )
+
+# Validate dates
+if from_date > to_date:
+    st.error("❌ 'From Date' must be before 'To Date'")
+    st.stop()
+
+st.markdown("---")
+
+# === FETCH & ANALYZE ===
+with st.spinner("📊 Fetching orders from Shiprocket..."):
+    orders = get_orders_by_date_range(token, from_date, to_date)
+
+if not orders:
+    st.warning(f"📭 No orders found between {from_date} and {to_date}")
+    st.stop()
+
+# Analyze
+stats, order_details = analyze_sku_performance(orders, selected_sku)
+total = stats["total"]
+
+if total == 0:
+    st.warning(f"📭 No orders found for SKU: {selected_sku}")
+    st.stop()
+
+# Calculate percentages
+pct_intransit = (stats["intransit"] / total * 100) if total > 0 else 0
+pct_delivered = (stats["delivered"] / total * 100) if total > 0 else 0
+pct_rto = (stats["rto"] / total * 100) if total > 0 else 0
+pct_undelivered = (stats["undelivered"] / total * 100) if total > 0 else 0
+
+# === TOTAL ORDERS BANNER ===
 st.markdown(f"""
-<div class="metric-row">
-    <div class="metric-card">
-        <div class="metric-value" style="color: #3fb950;">{total_shipped}</div>
-        <div class="metric-label">Total Shipped (All Time)</div>
-        <div class="metric-change up">↑ 12% vs last week</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-value" style="color: #58a6ff;">{len(batches)}</div>
-        <div class="metric-label">Total Batches</div>
-        <div class="metric-change up">↑ 8% vs last week</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-value" style="color: #a855f7;">{success_rate:.1f}%</div>
-        <div class="metric-label">Success Rate</div>
-        <div class="metric-change up">↑ 2.3% vs last week</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-value" style="color: #f0883e;">₹75,224</div>
-        <div class="metric-label">Wallet Balance</div>
-        <div class="metric-change down">↓ ₹5,200 used today</div>
-    </div>
+<div class="total-card">
+    <div style="font-size: 1rem; color: #8b949e;">Total Orders for <strong>{selected_sku}</strong></div>
+    <div style="font-size: 3rem; font-weight: 700; color: #e6edf3;">{total}</div>
+    <div style="color: #8b949e; font-size: 0.9rem;">{from_date.strftime('%b %d, %Y')} — {to_date.strftime('%b %d, %Y')}</div>
 </div>
 """, unsafe_allow_html=True)
 
-# === CHARTS ROW ===
+st.markdown("<br>", unsafe_allow_html=True)
+
+# === 4 STAT CARDS ===
+c1, c2, c3, c4 = st.columns(4, gap="medium")
+
+with c1:
+    st.markdown(f"""
+    <div class="stat-card intransit">
+        <div class="stat-value">{stats["intransit"]}</div>
+        <div class="stat-label">🚚 In-Transit</div>
+        <div class="stat-percent">{pct_intransit:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c2:
+    st.markdown(f"""
+    <div class="stat-card delivered">
+        <div class="stat-value">{stats["delivered"]}</div>
+        <div class="stat-label">✅ Delivered</div>
+        <div class="stat-percent">{pct_delivered:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c3:
+    st.markdown(f"""
+    <div class="stat-card rto">
+        <div class="stat-value">{stats["rto"]}</div>
+        <div class="stat-label">↩️ RTO</div>
+        <div class="stat-percent">{pct_rto:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c4:
+    st.markdown(f"""
+    <div class="stat-card undelivered">
+        <div class="stat-value">{stats["undelivered"]}</div>
+        <div class="stat-label">❌ Undelivered</div>
+        <div class="stat-percent">{pct_undelivered:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# === DELIVERY SUCCESS RATE ===
+st.markdown("<br>", unsafe_allow_html=True)
+delivery_rate = pct_delivered
+
+if delivery_rate >= 90:
+    rate_color = "#3fb950"
+    rate_emoji = "🏆"
+    rate_text = "Excellent"
+elif delivery_rate >= 80:
+    rate_color = "#58a6ff"
+    rate_emoji = "👍"
+    rate_text = "Good"
+elif delivery_rate >= 70:
+    rate_color = "#f0883e"
+    rate_emoji = "⚠️"
+    rate_text = "Needs Improvement"
+else:
+    rate_color = "#f85149"
+    rate_emoji = "🚨"
+    rate_text = "Critical"
+
+st.markdown(f"""
+<div style="background: rgba(22, 27, 34, 0.9); border: 1px solid {rate_color}; border-radius: 12px; padding: 20px; text-align: center;">
+    <div style="font-size: 1rem; color: #8b949e;">Delivery Success Rate</div>
+    <div style="font-size: 3rem; font-weight: 700; color: {rate_color};">{delivery_rate:.1f}%</div>
+    <div style="font-size: 1.2rem; color: {rate_color};">{rate_emoji} {rate_text}</div>
+</div>
+""", unsafe_allow_html=True)
+
+# === ORDER DETAILS TABLE ===
 st.markdown("---")
-chart_col1, chart_col2 = st.columns(2, gap="large")
+st.markdown("### 📋 Order Details")
 
-with chart_col1:
-    st.markdown("### 📊 7-Day Shipping Trend")
-    
-    # Generate 7-day data
-    dates = [(datetime.now() - timedelta(days=i)).strftime("%b %d") for i in range(6, -1, -1)]
-    shipped_data = [random.randint(800, 1200) for _ in range(7)]
-    
-    chart_data = pd.DataFrame({
-        "Date": dates,
-        "Orders Shipped": shipped_data
-    })
-    chart_data = chart_data.set_index("Date")
-    
-    st.area_chart(chart_data, color="#58a6ff", height=300)
-
-with chart_col2:
-    st.markdown("### 🚚 Courier Distribution")
-    
-    # Courier data
-    courier_data = pd.DataFrame({
-        "Courier": ["Delhivery", "Bluedart", "Ecom Express", "Xpressbees", "DTDC"],
-        "Orders": [450, 320, 180, 150, 100]
-    })
-    courier_data = courier_data.set_index("Courier")
-    
-    st.bar_chart(courier_data, color="#a855f7", height=300)
-
-# === SECOND ROW OF CHARTS ===
-st.markdown("---")
-chart_col3, chart_col4 = st.columns(2, gap="large")
-
-with chart_col3:
-    st.markdown("### ⏰ Peak Hours Analysis")
-    
-    hours = [f"{h}:00" for h in range(8, 20)]
-    orders_by_hour = [45, 120, 280, 350, 420, 380, 290, 450, 520, 480, 320, 180]
-    
-    hour_data = pd.DataFrame({
-        "Hour": hours,
-        "Orders": orders_by_hour
-    })
-    hour_data = hour_data.set_index("Hour")
-    
-    st.bar_chart(hour_data, color="#3fb950", height=300)
-
-with chart_col4:
-    st.markdown("### 📦 Top SKUs This Week")
-    
-    sku_data = pd.DataFrame({
-        "SKU": ["IRUN1771242", "SHOE-BLK-42", "TSHIRT-WHT-L", "BAG-LEATHER", "WATCH-GOLD"],
-        "Orders": [234, 189, 156, 134, 98]
-    })
-    sku_data = sku_data.set_index("SKU")
-    
-    st.bar_chart(sku_data, color="#f0883e", height=300, horizontal=True)
-
-# === COURIER PERFORMANCE TABLE ===
-st.markdown("---")
-st.markdown("### 🏆 Courier Performance Leaderboard")
-
-perf_data = pd.DataFrame({
-    "Courier": ["Bluedart ⭐", "Delhivery", "Xpressbees", "Ecom Express", "DTDC"],
-    "On-Time %": ["98%", "92%", "85%", "78%", "75%"],
-    "Avg Delivery (days)": [2.1, 2.8, 3.2, 3.5, 4.1],
-    "Total Orders": [320, 450, 150, 180, 100],
-    "RTO Rate": ["2%", "5%", "8%", "12%", "15%"],
-    "Rating": ["⭐⭐⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐", "⭐⭐⭐"]
-})
-
-st.dataframe(
-    perf_data,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Courier": st.column_config.TextColumn("🚚 Courier"),
-        "On-Time %": st.column_config.TextColumn("⏱️ On-Time"),
-        "Avg Delivery (days)": st.column_config.NumberColumn("📅 Avg Days", format="%.1f"),
-        "Total Orders": st.column_config.NumberColumn("📦 Orders"),
-        "RTO Rate": st.column_config.TextColumn("↩️ RTO"),
-        "Rating": st.column_config.TextColumn("⭐ Rating")
-    }
+# Filter options
+filter_category = st.selectbox(
+    "Filter by Status",
+    ["All", "In-Transit", "Delivered", "RTO", "Undelivered"],
+    index=0
 )
 
-# === INSIGHTS SECTION ===
-st.markdown("---")
-st.markdown("### 💡 AI Insights")
+# Filter order details
+if filter_category != "All":
+    category_map = {"In-Transit": "intransit", "Delivered": "delivered", "RTO": "rto", "Undelivered": "undelivered"}
+    filtered_details = [o for o in order_details if o["category"] == category_map[filter_category]]
+else:
+    filtered_details = order_details
 
-ins1, ins2, ins3 = st.columns(3)
-
-with ins1:
-    st.info("📈 **Peak Performance**\n\nYour best shipping hour is 2-3 PM with 520 orders processed on average.")
-
-with ins2:
-    st.success("🏆 **Top Performer**\n\nBluedart has the highest on-time delivery rate at 98%. Consider prioritizing for urgent orders.")
-
-with ins3:
-    st.warning("⚠️ **Attention Needed**\n\nEcom Express RTO rate is 12%. Review address verification for this courier.")
+# Display table
+if filtered_details:
+    import pandas as pd
+    df = pd.DataFrame(filtered_details)
+    df = df.rename(columns={
+        "order_id": "Order ID",
+        "date": "Date",
+        "status": "Status",
+        "awb": "AWB",
+        "courier": "Courier"
+    })
+    df = df[["Order ID", "Date", "Status", "AWB", "Courier"]]
+    
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        height=400
+    )
+    
+    # Export button
+    csv = df.to_csv(index=False)
+    st.download_button(
+        "📥 Export to CSV",
+        csv,
+        f"sku_analytics_{selected_sku}_{from_date}_{to_date}.csv",
+        "text/csv",
+        use_container_width=True
+    )
+else:
+    st.info("No orders found for selected filter")
 
 # === FOOTER ===
 st.markdown("---")
-st.caption("📊 Analytics • Last updated: " + datetime.now().strftime("%I:%M %p"))
+st.caption(f"📊 Last updated: {datetime.now().strftime('%I:%M %p')} • Data from Shiprocket API")
