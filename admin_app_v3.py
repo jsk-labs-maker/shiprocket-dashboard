@@ -1378,47 +1378,20 @@ with c3:
 with c4:
     st.markdown(build_kanban_column("archive", "ARCHIVE", kanban_archive, "gray", "No archived tasks"), unsafe_allow_html=True)
 
-# === MIDDLE SECTION: Activity + Summary ===
+# === ACTIVITY SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
-col_activity, col_summary = st.columns([2, 1.5], gap="medium")
 
-with col_activity:
-    # Build activity HTML in one block with scrollable content
-    real_activities = get_activity()
-    if not real_activities:
-        real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
-    
-    activity_items = ""
-    for a in real_activities[:10]:  # Show more activities (scrollable)
-        activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
-    
-    activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="section-content">{activity_items}</div></div>'
-    st.markdown(activity_html, unsafe_allow_html=True)
+# Build activity HTML in one block with scrollable content
+real_activities = get_activity()
+if not real_activities:
+    real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
 
-with col_summary:
-    st.markdown(f"""
-    <div class="summary-card">
-        <div class="summary-title">📊 Today's Summary</div>
-        <div class="summary-grid">
-            <div class="summary-item">
-                <div class="summary-value success">{today_shipped}</div>
-                <div class="summary-label">Shipped</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-value error">{today_failed}</div>
-                <div class="summary-label">Failed</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-value">{success_rate:.1f}%</div>
-                <div class="summary-label">Success</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-value">{len(today_batches)}</div>
-                <div class="summary-label">Batches</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+activity_items = ""
+for a in real_activities[:10]:
+    activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
+
+activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="section-content">{activity_items}</div></div>'
+st.markdown(activity_html, unsafe_allow_html=True)
 
 
 # === BOTTOM SECTIONS: Schedules + Notes ===
