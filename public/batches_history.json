@@ -1,6 +1,20 @@
 {
   "batches": [
     {
+      "timestamp": "2026-02-17T11:59:25.894774",
+      "date": "2026-02-17",
+      "time": "11:59 AM",
+      "display_time": "11:59 AM",
+      "total_orders": 4,
+      "shipped": 3,
+      "failed": 0,
+      "unshipped": 1,
+      "source": "shiprocket_api",
+      "labels_sorted": {},
+      "zip_filename": null,
+      "manifest_filename": null
+    },
+    {
       "timestamp": "2026-02-16T20:52:42.381932",
       "date": "2026-02-16",
       "time": "08:52 PM",

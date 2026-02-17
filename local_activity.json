@@ -1,26 +1,36 @@
 [
   {
-    "text": "✅ Task 'text hi on telegram' completed",
+    "text": "\ud83d\udcca Synced real data from Shiprocket API",
+    "timestamp": "2026-02-17T11:59:31.816982",
+    "type": "blue"
+  },
+  {
+    "text": "\u2705 Task \"test me hi on telegram\" completed",
+    "timestamp": "2026-02-17T11:55:12.356193",
+    "type": "green"
+  },
+  {
+    "text": "\u2705 Task 'text hi on telegram' completed",
     "timestamp": "2026-02-17T11:55:00",
     "type": "green"
   },
   {
-    "text": "🔧 Dashboard bug fixed - tasks persist",
+    "text": "\ud83d\udd27 Dashboard bug fixed - tasks persist",
     "timestamp": "2026-02-17T11:50:00",
     "type": "blue"
   },
   {
-    "text": "📐 Kanban column height fixed",
+    "text": "\ud83d\udcd0 Kanban column height fixed",
     "timestamp": "2026-02-17T11:48:00",
     "type": "blue"
   },
   {
-    "text": "🤖 AI Kluzo connected to dashboard",
+    "text": "\ud83e\udd16 AI Kluzo connected to dashboard",
     "timestamp": "2026-02-17T11:30:00",
     "type": "green"
   },
   {
-    "text": "🚀 Dashboard v3.5 Premium launched",
+    "text": "\ud83d\ude80 Dashboard v3.5 Premium launched",
     "timestamp": "2026-02-17T09:00:00",
     "type": "green"
   }
