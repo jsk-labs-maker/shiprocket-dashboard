@@ -128,7 +128,7 @@ def get_shiprocket_credentials():
     password = os.getenv("SHIPROCKET_PASSWORD", "Kluzo@1212")
     return email, password
 
-def fetch_shiprocket_data(days=30, progress_callback=None):
+def fetch_shiprocket_data(from_date=None, to_date=None, days=30, progress_callback=None):
     """Fetch orders from Shiprocket API with progress"""
     email, password = get_shiprocket_credentials()
     
@@ -146,9 +146,17 @@ def fetch_shiprocket_data(days=30, progress_callback=None):
     token = auth.json().get("token")
     headers = {"Authorization": f"Bearer {token}"}
     
-    # Date range
-    to_date = datetime.now()
-    from_date = to_date - timedelta(days=days)
+    # Date range - use provided dates or fallback to days
+    if from_date is None:
+        from_date = datetime.now() - timedelta(days=days)
+    if to_date is None:
+        to_date = datetime.now()
+    
+    # Convert date to datetime if needed
+    if hasattr(from_date, 'strftime') and not hasattr(from_date, 'hour'):
+        from_date = datetime.combine(from_date, datetime.min.time())
+    if hasattr(to_date, 'strftime') and not hasattr(to_date, 'hour'):
+        to_date = datetime.combine(to_date, datetime.max.time())
     
     if progress_callback:
         progress_callback(5, f"📅 Fetching orders from {from_date.strftime('%Y-%m-%d')} to {to_date.strftime('%Y-%m-%d')}...")
@@ -266,14 +274,30 @@ if "analytics_df" in st.session_state and st.session_state["analytics_df"] is no
         del st.session_state["analytics_df"]
         st.rerun()
 
-col_btn1, col_btn2 = st.columns(2)
+col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
 
 with col_btn1:
-    days_option = st.selectbox("📅 Select Period", [30, 60, 90, 180, 365], index=0, format_func=lambda x: f"Last {x} Days")
-    fetch_clicked = st.button("🔄 Fetch from Shiprocket", type="primary", use_container_width=True)
+    date_mode = st.radio("📅 Date Selection", ["Preset", "Custom"], horizontal=True)
 
 with col_btn2:
-    st.markdown("<br>", unsafe_allow_html=True)
+    if date_mode == "Preset":
+        days_option = st.selectbox("Period", [30, 60, 90, 180, 365], index=0, format_func=lambda x: f"Last {x} Days")
+        fetch_from = datetime.now() - timedelta(days=days_option)
+        fetch_to = datetime.now()
+    else:
+        fetch_from = st.date_input("From Date", value=datetime.now() - timedelta(days=30))
+
+with col_btn3:
+    if date_mode == "Custom":
+        fetch_to = st.date_input("To Date", value=datetime.now())
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+# Buttons row
+btn_col1, btn_col2 = st.columns(2)
+with btn_col1:
+    fetch_clicked = st.button("🔄 Fetch from Shiprocket", type="primary", use_container_width=True)
+with btn_col2:
     uploaded_file = st.file_uploader("📤 Or Upload Export", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
 
 # === LOAD DATA ===
@@ -291,7 +315,7 @@ if fetch_clicked:
     
     update_progress(0, "🚀 Starting fetch...")
     
-    df, error = fetch_shiprocket_data(days=days_option, progress_callback=update_progress)
+    df, error = fetch_shiprocket_data(from_date=fetch_from, to_date=fetch_to, progress_callback=update_progress)
     
     if error:
         progress_bar.empty()
@@ -304,8 +328,12 @@ if fetch_clicked:
         progress_bar.empty()
         status_text.empty()
         
+        # Format date range for display
+        from_str = fetch_from.strftime('%Y-%m-%d') if hasattr(fetch_from, 'strftime') else str(fetch_from)
+        to_str = fetch_to.strftime('%Y-%m-%d') if hasattr(fetch_to, 'strftime') else str(fetch_to)
+        
         st.session_state["analytics_df"] = df
-        st.session_state["data_source"] = f"Shiprocket API (Last {days_option} days) - {len(df)} rows"
+        st.session_state["data_source"] = f"Shiprocket API ({from_str} to {to_str}) - {len(df)} rows"
         st.success(f"✅ Loaded {len(df)} orders from Shiprocket!")
         st.rerun()  # Refresh to show data
     else:
