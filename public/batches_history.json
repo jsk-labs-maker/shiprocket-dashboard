@@ -1,6 +1,21 @@
 {
   "batches": [
     {
+      "timestamp": "2026-02-17T13:07:50.930263",
+      "date": "2026-02-17",
+      "time": "01:07 PM",
+      "display_time": "01:07 PM",
+      "total_orders": 3,
+      "shipped": 3,
+      "failed": 0,
+      "awbs": [
+        "BSRC3575493272",
+        "BSRC3567583646",
+        "BSRC3529762967"
+      ],
+      "source": "ship_orders_now"
+    },
+    {
       "timestamp": "2026-02-17T12:36:02.849511",
       "date": "2026-02-17",
       "time": "12:36 PM",

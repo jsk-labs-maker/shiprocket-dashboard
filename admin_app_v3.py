@@ -1648,20 +1648,41 @@ with c2:
 with c3:
     st.markdown(build_kanban_column("done", "DONE", kanban_done, "green", "No completed tasks"), unsafe_allow_html=True)
 
-# === ACTIVITY SECTION ===
+# === ACTIVITY + DOWNLOADS SECTION ===
 st.markdown("<br>", unsafe_allow_html=True)
+act_col, dl_col = st.columns(2, gap="medium")
 
-# Build activity HTML in one block with scrollable content
-real_activities = get_activity()
-if not real_activities:
-    real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
+with act_col:
+    # Build activity HTML
+    real_activities = get_activity()
+    if not real_activities:
+        real_activities = [{"text": "No recent activity", "time": "—", "type": "blue"}]
+    
+    activity_items = ""
+    for a in real_activities[:8]:
+        activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
+    
+    activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="section-content">{activity_items}</div></div>'
+    st.markdown(activity_html, unsafe_allow_html=True)
 
-activity_items = ""
-for a in real_activities[:10]:
-    activity_items += f'<div class="activity-item"><span class="activity-dot {a.get("type", "blue")}"></span><div class="activity-content"><div class="activity-text">{a.get("text", "")}</div><div class="activity-time">{a.get("time", "")}</div></div></div>'
-
-activity_html = f'<div class="section-box"><div class="section-title">⚡ Recent Activity</div><div class="section-content">{activity_items}</div></div>'
-st.markdown(activity_html, unsafe_allow_html=True)
+with dl_col:
+    # Build downloads history HTML
+    all_docs = get_documents()
+    
+    download_items = ""
+    if all_docs:
+        for d in all_docs[:8]:
+            doc_type = d.get("type", "file")
+            icon = "🏷️" if doc_type == "labels" else "📄" if doc_type == "manifest" else "📁"
+            size_kb = d.get("size", 0) / 1024
+            size_str = f"{size_kb:.1f}KB" if size_kb < 1024 else f"{size_kb/1024:.1f}MB"
+            created = d.get("created_at", "")[:16].replace("T", " ")
+            download_items += f'<div class="activity-item"><span class="activity-dot green"></span><div class="activity-content"><div class="activity-text">{icon} {d.get("filename", "Unknown")}</div><div class="activity-time">{created} • {size_str}</div></div></div>'
+    else:
+        download_items = '<div class="empty-state">No downloads yet</div>'
+    
+    downloads_html = f'<div class="section-box"><div class="section-title">📥 Downloads History</div><div class="section-content">{download_items}</div></div>'
+    st.markdown(downloads_html, unsafe_allow_html=True)
 
 
 # === BOTTOM SECTIONS: Schedules + Notes ===
