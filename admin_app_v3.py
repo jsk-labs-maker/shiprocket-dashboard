@@ -273,10 +273,18 @@ button[kind="header"],
     padding: 0; 
     min-height: 350px;
     transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
 }
 .kanban-col:hover {
     border-color: #30363d;
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.kanban-tasks {
+    flex: 1;
+    padding: 8px;
+    overflow-y: auto;
+    max-height: 280px;
 }
 .kanban-header { 
     padding: 14px 16px; 
@@ -899,61 +907,91 @@ if sr_data['new_orders'] > 50:
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
 with c1:
+    # Build TO DO column HTML
+    todo_tasks_html = ""
+    for t in todo:
+        priority = t.get("priority", "medium")
+        dot_class = "orange" if priority == "high" else "blue"
+        todo_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot {dot_class}"></span><span class="t-text">{t.get("title","")}</span></div></div>'
+    
+    if not todo:
+        todo_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No pending tasks</div>'
+    
     st.markdown(f"""
     <div class="kanban-col">
         <div class="kanban-header">
             <div class="kanban-title"><span class="k-dot orange"></span> TO DO ({len(todo)})</div>
             <span class="k-add">+</span>
         </div>
+        <div class="kanban-tasks">
+            {todo_tasks_html}
+        </div>
+    </div>
     """, unsafe_allow_html=True)
-    for t in todo:
-        priority = t.get("priority", "medium")
-        dot_class = "orange" if priority == "high" else "blue"
-        st.markdown(f'<div class="task"><div class="task-content"><span class="t-dot {dot_class}"></span><span class="t-text">{t.get("title","")}</span></div></div>', unsafe_allow_html=True)
-    if not todo:
-        st.caption("No pending tasks")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with c2:
+    # Build IN PROGRESS column HTML
+    doing_tasks_html = ""
+    for t in doing:
+        doing_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot blue"></span><span class="t-text">{t.get("title","")}</span></div></div>'
+    
+    if not doing:
+        doing_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No tasks in progress</div>'
+    
     st.markdown(f"""
     <div class="kanban-col">
         <div class="kanban-header">
             <div class="kanban-title"><span class="k-dot blue"></span> IN PROGRESS ({len(doing)})</div>
             <span class="k-add">+</span>
         </div>
+        <div class="kanban-tasks">
+            {doing_tasks_html}
+        </div>
+    </div>
     """, unsafe_allow_html=True)
-    for t in doing:
-        st.markdown(f'<div class="task"><div class="task-content"><span class="t-dot blue"></span><span class="t-text">{t.get("title","")}</span></div></div>', unsafe_allow_html=True)
-    if not doing:
-        st.caption("No tasks in progress")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with c3:
+    # Build DONE column HTML
+    done_tasks_html = ""
+    for t in done:
+        done_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">{t.get("title","")}</span></div></div>'
+    for b in today_batches[:4]:
+        ts = b.get("timestamp", "")
+        time_str = ts[11:16] if len(ts) > 16 else ""
+        done_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">✅ Batch {time_str}: {b.get("shipped",0)} shipped</span></div></div>'
+    
+    if not done and not today_batches:
+        done_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No completed tasks</div>'
+    
     st.markdown(f"""
     <div class="kanban-col">
         <div class="kanban-header">
             <div class="kanban-title"><span class="k-dot green"></span> DONE ({len(done) + len(today_batches)})</div>
             <span class="k-add">+</span>
         </div>
+        <div class="kanban-tasks">
+            {done_tasks_html}
+        </div>
+    </div>
     """, unsafe_allow_html=True)
-    for t in done:
-        st.markdown(f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">{t.get("title","")}</span></div></div>', unsafe_allow_html=True)
-    for b in today_batches[:4]:
-        ts = b.get("timestamp", "")
-        time_str = ts[11:16] if len(ts) > 16 else ""
-        st.markdown(f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">✅ Batch {time_str}: {b.get("shipped",0)} shipped</span></div></div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with c4:
-    st.markdown("""
+    # Build ARCHIVE column HTML
+    archive_tasks_html = ""
+    for item in archive_items[:5]:
+        archive_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot gray"></span><span class="t-text muted">{item[:45]}...</span></div></div>'
+    
+    st.markdown(f"""
     <div class="kanban-col">
         <div class="kanban-header">
             <div class="kanban-title"><span class="k-dot gray"></span> ARCHIVE</div>
         </div>
+        <div class="kanban-tasks">
+            {archive_tasks_html}
+        </div>
+        <button class="show-btn">Show all {len(batches)} archived ▼</button>
+    </div>
     """, unsafe_allow_html=True)
-    for item in archive_items[:4]:
-        st.markdown(f'<div class="task"><div class="task-content"><span class="t-dot gray"></span><span class="t-text muted">{item[:40]}...</span></div></div>', unsafe_allow_html=True)
-    st.markdown(f'<button class="show-btn">Show all {len(batches)} archived ▼</button></div>', unsafe_allow_html=True)
 
 
 # === MIDDLE SECTION: Activity + Courier Health + Summary ===
