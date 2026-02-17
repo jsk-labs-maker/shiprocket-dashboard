@@ -293,10 +293,11 @@ button[kind="header"],
     border: 1px solid #21262d; 
     border-radius: 12px; 
     padding: 0; 
-    min-height: 350px;
+    height: 400px;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 .kanban-col:hover {
     border-color: #30363d;
@@ -306,7 +307,8 @@ button[kind="header"],
     flex: 1;
     padding: 8px;
     overflow-y: auto;
-    max-height: 280px;
+    max-height: 320px;
+    min-height: 320px;
 }
 .kanban-header { 
     padding: 14px 16px; 
@@ -1079,27 +1081,22 @@ if sr_data['new_orders'] > 50:
 
 # Task management functions
 def load_local_tasks():
-    """Load tasks from local file first, then GitHub as fallback."""
+    """Load tasks from local file first, then GitHub as fallback.
+    Returns None if no file exists (first run), returns [] if user deleted all tasks."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     tasks_file = os.path.join(script_dir, "local_tasks.json")
     
-    # 1. Try local file first
+    # 1. Try local file first - this is authoritative if it exists
     if os.path.exists(tasks_file):
         try:
             with open(tasks_file, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, list) else []
         except:
             pass
     
-    # 2. Fallback to GitHub
-    try:
-        r = requests.get(f"{GITHUB_RAW_BASE}/tasks/tasks.json", timeout=5)
-        if r.ok:
-            return r.json().get("tasks", [])
-    except:
-        pass
-    
-    return []
+    # 2. No local file = first run, return None to trigger defaults
+    return None
 
 def save_local_tasks(tasks):
     """Save tasks to local file and GitHub public folder."""
@@ -1118,14 +1115,18 @@ def save_local_tasks(tasks):
 
 # Load tasks
 if 'kanban_tasks' not in st.session_state:
-    st.session_state.kanban_tasks = load_local_tasks()
-    # Add default tasks if empty
-    if not st.session_state.kanban_tasks:
+    loaded_tasks = load_local_tasks()
+    # Only add defaults if NO local file exists (None = first run)
+    # Empty list [] means user deleted all tasks - respect that!
+    if loaded_tasks is None:
         st.session_state.kanban_tasks = [
             {"id": 1, "title": "Check inventory levels", "status": "todo", "priority": "medium", "category": "shiprocket", "desc": ""},
             {"id": 2, "title": "Update courier priorities", "status": "todo", "priority": "low", "category": "other", "desc": ""},
             {"id": 3, "title": "Ship morning batch", "status": "done", "priority": "high", "category": "shiprocket", "desc": ""},
         ]
+        save_local_tasks(st.session_state.kanban_tasks)  # Create the file
+    else:
+        st.session_state.kanban_tasks = loaded_tasks
 
 # Priority colors
 PRIORITY_COLORS = {"high": "🔴", "medium": "🟡", "low": "🟢"}
@@ -1175,73 +1176,116 @@ if st.session_state.get("show_add_task"):
                 st.rerun()
         st.markdown("---")
 
-# Kanban Columns
+# Kanban Columns with custom styling
+st.markdown("""
+<style>
+.kanban-header-custom {
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.kanban-todo { background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(234, 88, 12, 0.1)); border: 1px solid #f97316; color: #fb923c; }
+.kanban-progress { background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.1)); border: 1px solid #3b82f6; color: #60a5fa; }
+.kanban-done { background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(22, 163, 74, 0.1)); border: 1px solid #22c55e; color: #4ade80; }
+.kanban-archive { background: linear-gradient(135deg, rgba(107, 114, 128, 0.2), rgba(75, 85, 99, 0.1)); border: 1px solid #6b7280; color: #9ca3af; }
+.task-card {
+    background: rgba(15, 20, 25, 0.9);
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+    transition: all 0.2s ease;
+}
+.task-card:hover {
+    border-color: #58a6ff;
+    box-shadow: 0 4px 15px rgba(88, 166, 255, 0.15);
+}
+.task-title { color: #e6edf3; font-size: 0.95rem; font-weight: 500; margin-bottom: 8px; }
+.task-meta { display: flex; gap: 10px; align-items: center; }
+.task-category { font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; }
+.cat-shiprocket { background: rgba(147, 51, 234, 0.2); color: #a78bfa; }
+.cat-other { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+.priority-dot { width: 10px; height: 10px; border-radius: 50%; }
+.pri-high { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+.pri-medium { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+.pri-low { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
+</style>
+""", unsafe_allow_html=True)
+
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
 def render_task_card(task, col_key):
-    """Render a task card with actions."""
+    """Render a task card - double tap × to delete."""
+    import time
     priority = task.get("priority", "medium")
     dot = PRIORITY_COLORS.get(priority, "🟡")
-    cat_icon = "📦" if task.get("category") == "shiprocket" else "📁"
+    cat = task.get("category", "other")
+    pri_class = f"pri-{priority}"
+    task_id = task.get("id", 0)
+    cat_badge = "📦" if cat == "shiprocket" else "📁"
+    cat_color = "#a78bfa" if cat == "shiprocket" else "#9ca3af"
+    cat_bg = "rgba(147,51,234,0.2)" if cat == "shiprocket" else "rgba(107,114,128,0.2)"
+    tap_key = f"tap_{task_id}_{col_key}"
     
-    with st.expander(f"{dot} {task.get('title', 'Task')}", expanded=False):
-        st.caption(f"{cat_icon} {task.get('category', 'other').title()}")
-        if task.get("desc"):
-            st.write(task.get("desc"))
-        
-        # Action buttons
-        act_col1, act_col2, act_col3 = st.columns(3)
-        with act_col1:
-            new_status = st.selectbox(
-                "Move to", 
-                ["todo", "in_progress", "done", "archive"],
-                index=["todo", "in_progress", "done", "archive"].index(task.get("status", "todo")),
-                format_func=lambda x: STATUS_NAMES.get(x, x),
-                key=f"move_{task['id']}_{col_key}"
-            )
-            if new_status != task.get("status"):
-                task["status"] = new_status
+    # Check if in "confirm delete" state
+    pending_delete = st.session_state.get(tap_key, 0)
+    is_pending = (time.time() - pending_delete) < 3 if pending_delete else False
+    
+    # Task card with × button inside
+    card_border = "#ef4444" if is_pending else "#30363d"
+    
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        st.markdown(f"""
+        <div style="background: rgba(15,20,25,0.9); border: 1px solid {card_border}; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; {'animation: pulse 0.5s;' if is_pending else ''}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="color: #e6edf3; font-size: 0.9rem; font-weight: 500;">{dot} {task.get('title', 'Task')}</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="background: {cat_bg}; color: {cat_color}; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;">{cat_badge}</span>
+                    <div class="priority-dot {pri_class}"></div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        btn_label = "✓" if is_pending else "×"
+        if st.button(btn_label, key=f"del_{task_id}_{col_key}", help="Double tap to delete"):
+            if is_pending:
+                # Second tap - delete
+                st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task_id]
                 save_local_tasks(st.session_state.kanban_tasks)
-                st.toast(f"✅ Moved to {STATUS_NAMES[new_status]}", icon="➡️")
+                st.toast("🗑️ Deleted!", icon="✅")
+                st.session_state[tap_key] = 0
                 st.rerun()
-        with act_col2:
-            new_pri = st.selectbox(
-                "Priority",
-                ["high", "medium", "low"],
-                index=["high", "medium", "low"].index(task.get("priority", "medium")),
-                format_func=lambda x: f"{PRIORITY_COLORS[x]} {x.title()}",
-                key=f"pri_{task['id']}_{col_key}"
-            )
-            if new_pri != task.get("priority"):
-                task["priority"] = new_pri
-                save_local_tasks(st.session_state.kanban_tasks)
-                st.toast("✅ Priority updated", icon="🎯")
-                st.rerun()
-        with act_col3:
-            if st.button("🗑️", key=f"del_{task['id']}_{col_key}", help="Delete task"):
-                st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task.get("id")]
-                save_local_tasks(st.session_state.kanban_tasks)
-                st.toast("🗑️ Task deleted", icon="✅")
+            else:
+                # First tap - mark pending
+                st.session_state[tap_key] = time.time()
+                st.toast("Tap ✓ to confirm delete", icon="⚠️")
                 st.rerun()
 
 with c1:
-    st.markdown(f"**🟠 TO DO ({len(kanban_todo)})**")
+    st.markdown(f'<div class="kanban-header-custom kanban-todo">🟠 TO DO ({len(kanban_todo)})</div>', unsafe_allow_html=True)
     if kanban_todo:
         for t in kanban_todo:
             render_task_card(t, "todo")
     else:
-        st.caption("No pending tasks")
+        st.caption("✨ No pending tasks")
 
 with c2:
-    st.markdown(f"**🔵 IN PROGRESS ({len(kanban_doing)})**")
+    st.markdown(f'<div class="kanban-header-custom kanban-progress">🔵 IN PROGRESS ({len(kanban_doing)})</div>', unsafe_allow_html=True)
     if kanban_doing:
         for t in kanban_doing:
             render_task_card(t, "doing")
     else:
-        st.caption("No tasks in progress")
+        st.caption("🎯 No tasks in progress")
 
 with c3:
-    st.markdown(f"**🟢 DONE ({len(kanban_done)})**")
+    st.markdown(f'<div class="kanban-header-custom kanban-done">🟢 DONE ({len(kanban_done)})</div>', unsafe_allow_html=True)
     if kanban_done:
         for t in kanban_done:
             render_task_card(t, "done")
@@ -1249,7 +1293,7 @@ with c3:
         st.caption("No completed tasks")
 
 with c4:
-    st.markdown(f"**⚫ ARCHIVE ({len(kanban_archive)})**")
+    st.markdown(f'<div class="kanban-header-custom kanban-archive">⚫ ARCHIVE ({len(kanban_archive)})</div>', unsafe_allow_html=True)
     if kanban_archive:
         for t in kanban_archive[:5]:
             render_task_card(t, "archive")

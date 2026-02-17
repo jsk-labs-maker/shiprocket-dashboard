@@ -1,7 +1,3 @@
 {
-  "tasks": [
-    {"id": 1, "title": "Check inventory levels", "status": "todo", "priority": "medium", "category": "shiprocket", "desc": ""},
-    {"id": 2, "title": "Update courier priorities", "status": "todo", "priority": "low", "category": "other", "desc": ""},
-    {"id": 3, "title": "Ship morning batch", "status": "done", "priority": "high", "category": "shiprocket", "desc": ""}
-  ]
+  "tasks": []
 }
