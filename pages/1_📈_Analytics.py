@@ -226,7 +226,7 @@ def categorize_status(status):
     status = str(status).upper().strip() if status else ""
     
     unshipped = ["NEW", "INVOICED", "CANCELLED", "CANCELED", "CANCELLATION REQUESTED", "PENDING PAYMENT", "PROCESSING", "CANCELLED BY USER", "CANCELLED BEFORE DISPATCHED"]
-    intransit = ["PICKUP SCHEDULED", "PICKED UP", "IN TRANSIT", "OUT FOR DELIVERY", "SHIPPED", "PICKUP GENERATED", "PICKUP QUEUED", "REACHED DESTINATION HUB", "REACHED AT DESTINATION HUB", "MISROUTED", "PENDING", "DISPATCHED", "MANIFESTED", "AWB ASSIGNED", "LABEL GENERATED", "MANIFEST GENERATED", "OUT FOR PICKUP", "HANDOVER TO COURIER", "SHIPMENT BOOKED", "IN TRANSIT TO DESTINATION HUB", "IN FLIGHT", "CUSTOM CLEARED", "DELAYED", "SHIPMENT HELD"]
+    intransit = ["DELIVERY DELAYED", "IN TRANSIT", "MISROUTED", "OUT FOR DELIVERY", "PICKED UP", "REACHED AT DESTINATION HUB", "REACHED DESTINATION HUB"]
     delivered = ["DELIVERED", "COMPLETE", "COMPLETED", "PARTIAL DELIVERED", "SELF FULFILLED", "FULFILLED"]
     rto = ["RTO INITIATED", "RTO IN TRANSIT", "RTO DELIVERED", "RTO", "RETURNED", "RTO NDR", "RTO OFD", "RTO ACKNOWLEDGED", "RTO DELIVERED TO ORIGIN"]
     undelivered = ["UNDELIVERED", "FAILED", "DELIVERY FAILED", "LOST", "DAMAGED", "DESTROYED", "DISPOSED OFF", "QC FAILED", "PICKUP ERROR", "PICKUP EXCEPTION", "CONTACT CUSTOMER CARE"]
@@ -266,7 +266,8 @@ def categorize_status(status):
         if s in status:
             return "intransit"
     
-    if "TRANSIT" in status or "PICKUP" in status or "SHIP" in status:
+    # Fallback for transit-related keywords (only exact matches now)
+    if status in ["IN TRANSIT", "OUT FOR DELIVERY", "PICKED UP"]:
         return "intransit"
     
     return "unshipped"
