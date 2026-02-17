@@ -1388,57 +1388,94 @@ if page == "⚙️ Settings":
     else:
         sched_data = {"schedules": [], "updated_at": ""}
     
-    st.markdown("#### 📅 Scheduled Batches")
-    st.caption("Configure automatic shipping schedules. When triggered, orders will be shipped, labels sorted, and you'll be notified.")
+    st.markdown("#### 📅 Scheduled Deliverables")
     
     for i, sched in enumerate(sched_data.get("schedules", [])):
-        with st.expander(f"{'🟢' if sched.get('enabled') else '🔴'} {sched.get('name', 'Schedule')}", expanded=False):
-            col1, col2 = st.columns(2)
-            with col1:
-                new_name = st.text_input("Name", value=sched.get("name", ""), key=f"sched_name_{i}")
-                new_time = st.time_input("Time", value=datetime.strptime(sched.get("time", "09:00"), "%H:%M").time(), key=f"sched_time_{i}")
-            with col2:
-                new_enabled = st.checkbox("Enabled", value=sched.get("enabled", True), key=f"sched_enabled_{i}")
-                days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                new_days = st.multiselect("Days", options=days_options, default=sched.get("days", []), key=f"sched_days_{i}")
-            
-            if st.button("💾 Save", key=f"save_sched_{i}", use_container_width=True):
-                sched_data["schedules"][i]["name"] = new_name
-                sched_data["schedules"][i]["time"] = new_time.strftime("%H:%M")
-                sched_data["schedules"][i]["days"] = new_days
+        sched_name = sched.get("name", "Schedule")
+        sched_time = sched.get("time", "09:00")
+        sched_enabled = sched.get("enabled", True)
+        sched_days = sched.get("days", [])
+        days_short = ", ".join([d[:3] for d in sched_days[:3]]) + ("..." if len(sched_days) > 3 else "")
+        
+        # Main row: Name | Time | Toggle | Settings
+        col_name, col_time, col_toggle, col_settings, col_delete = st.columns([3, 1, 1, 1, 1])
+        
+        with col_name:
+            st.markdown(f"**{sched_name}**")
+            st.caption(days_short if days_short else "No days set")
+        
+        with col_time:
+            st.markdown(f"<div style='padding-top: 8px; color: #8b949e;'>{sched_time}</div>", unsafe_allow_html=True)
+        
+        with col_toggle:
+            new_enabled = st.toggle("", value=sched_enabled, key=f"toggle_{i}", label_visibility="collapsed")
+            if new_enabled != sched_enabled:
                 sched_data["schedules"][i]["enabled"] = new_enabled
                 sched_data["updated_at"] = datetime.now().isoformat()
-                
                 with open(sched_file, "w") as f:
                     json.dump(sched_data, f, indent=2)
-                st.success(f"✅ {new_name} saved!")
                 st.rerun()
-    
-    st.markdown("---")
-    st.markdown("#### ➕ Add New Schedule")
-    with st.form("new_schedule"):
-        col1, col2 = st.columns(2)
-        with col1:
-            add_name = st.text_input("Schedule Name", placeholder="e.g., Night Batch")
-            add_time = st.time_input("Time", value=datetime.strptime("21:00", "%H:%M").time())
-        with col2:
-            add_enabled = st.checkbox("Enabled", value=True)
-            add_days = st.multiselect("Days", options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], default=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
         
-        if st.form_submit_button("➕ Add Schedule", use_container_width=True):
+        with col_settings:
+            if st.button("⚙️", key=f"settings_{i}", help="Edit schedule"):
+                st.session_state[f"edit_sched_{i}"] = not st.session_state.get(f"edit_sched_{i}", False)
+                st.rerun()
+        
+        with col_delete:
+            if st.button("🗑️", key=f"del_sched_{i}", help="Delete schedule"):
+                sched_data["schedules"].pop(i)
+                sched_data["updated_at"] = datetime.now().isoformat()
+                with open(sched_file, "w") as f:
+                    json.dump(sched_data, f, indent=2)
+                st.rerun()
+        
+        # Settings panel (shown when ⚙️ clicked)
+        if st.session_state.get(f"edit_sched_{i}", False):
+            with st.container():
+                st.markdown("<div style='background: rgba(22,27,34,0.5); padding: 15px; border-radius: 8px; margin: 10px 0;'>", unsafe_allow_html=True)
+                edit_col1, edit_col2 = st.columns(2)
+                with edit_col1:
+                    new_name = st.text_input("Name", value=sched_name, key=f"edit_name_{i}")
+                    new_time = st.time_input("Time", value=datetime.strptime(sched_time, "%H:%M").time(), key=f"edit_time_{i}")
+                with edit_col2:
+                    days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                    new_days = st.multiselect("Days", options=days_options, default=sched_days, key=f"edit_days_{i}")
+                
+                if st.button("💾 Save Changes", key=f"save_{i}", use_container_width=True):
+                    sched_data["schedules"][i]["name"] = new_name
+                    sched_data["schedules"][i]["time"] = new_time.strftime("%H:%M")
+                    sched_data["schedules"][i]["days"] = new_days
+                    sched_data["updated_at"] = datetime.now().isoformat()
+                    with open(sched_file, "w") as f:
+                        json.dump(sched_data, f, indent=2)
+                    st.session_state[f"edit_sched_{i}"] = False
+                    st.success("✅ Saved!")
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+    
+    # Add New Schedule
+    st.markdown("#### ➕ Add New Schedule")
+    add_col1, add_col2, add_col3 = st.columns([2, 1, 1])
+    with add_col1:
+        add_name = st.text_input("Name", placeholder="e.g., Night Batch", key="add_name", label_visibility="collapsed")
+    with add_col2:
+        add_time = st.time_input("Time", value=datetime.strptime("21:00", "%H:%M").time(), key="add_time", label_visibility="collapsed")
+    with add_col3:
+        if st.button("➕ Add", use_container_width=True):
             if add_name:
                 new_sched = {
                     "id": f"sched-{len(sched_data.get('schedules', [])) + 1:03d}",
                     "name": add_name,
                     "time": add_time.strftime("%H:%M"),
-                    "days": add_days,
+                    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                     "action": "Ship All Orders",
-                    "enabled": add_enabled,
+                    "enabled": True,
                     "last_run": None
                 }
                 sched_data["schedules"].append(new_sched)
                 sched_data["updated_at"] = datetime.now().isoformat()
-                
                 with open(sched_file, "w") as f:
                     json.dump(sched_data, f, indent=2)
                 st.success(f"✅ {add_name} added!")
