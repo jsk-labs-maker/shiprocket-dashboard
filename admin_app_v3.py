@@ -11,6 +11,8 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 import json
+import os
+import base64
 
 # === PAGE CONFIG ===
 st.set_page_config(
@@ -539,15 +541,17 @@ button[kind="header"],
 
 /* === SECTIONS === */
 .section-box { 
-    background: rgba(22, 27, 34, 0.6);
+    background: rgba(22, 27, 34, 0.9);
     backdrop-filter: blur(10px);
-    border: 1px solid #21262d; 
+    border: 1px solid #30363d; 
     border-radius: 12px; 
-    padding: 16px;
+    padding: 20px;
+    margin-bottom: 10px;
     transition: all 0.2s ease;
 }
 .section-box:hover {
-    border-color: #30363d;
+    border-color: #58a6ff;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.1);
 }
 .section-title { 
     color: #8b949e; 
@@ -657,12 +661,46 @@ def get_batches():
         return r.json().get("batches", []) if r.ok else []
     except: return []
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10)  # Short TTL to see new notes quickly
 def get_notes():
+    all_notes = []
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    notes_file = os.path.join(script_dir, "local_notes.json")
+    
+    # 1. Load from local file first (user-added notes)
     try:
-        r = requests.get(f"{GITHUB_RAW_BASE}/notes/notes.json", timeout=5)
-        return r.json().get("notes", []) if r.ok else []
-    except: return []
+        if os.path.exists(notes_file):
+            with open(notes_file, "r") as f:
+                local_notes = json.load(f)
+            
+            # Filter: keep only notes from last 2 days
+            cutoff = datetime.now() - timedelta(days=2)
+            fresh_notes = []
+            for n in local_notes:
+                try:
+                    note_time = datetime.strptime(n.get("timestamp", ""), "%Y-%m-%d %H:%M:%S")
+                    if note_time >= cutoff:
+                        fresh_notes.append(n)
+                except:
+                    fresh_notes.append(n)  # Keep if can't parse date
+            
+            # Save cleaned notes back if any were removed
+            if len(fresh_notes) < len(local_notes):
+                with open(notes_file, "w") as f:
+                    json.dump(fresh_notes, f, indent=2)
+            
+            all_notes.extend(fresh_notes)
+    except Exception as e:
+        pass
+    
+    # 2. Load from GitHub (only if no local notes)
+    if not all_notes:
+        try:
+            r = requests.get(f"{GITHUB_RAW_BASE}/notes/notes.json", timeout=5)
+            if r.ok:
+                all_notes.extend(r.json().get("notes", []))
+        except: pass
+    return all_notes
 
 @st.cache_data(ttl=30)
 def get_schedules():
@@ -803,10 +841,6 @@ with st.sidebar:
     
     # Stats cards
     st.markdown(f"""
-    <div class="sidebar-stat">
-        <div class="sidebar-stat-val">₹{sr_data['wallet']:,.0f}</div>
-        <div class="sidebar-stat-label">💰 Wallet Balance</div>
-    </div>
     <div class="sidebar-stat">
         <div class="sidebar-stat-val blue">{sr_data['new_orders']}</div>
         <div class="sidebar-stat-label">📦 New Orders</div>
@@ -1004,8 +1038,8 @@ st.markdown(f"""
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
-        <div class="stat-value">💰 ₹{sr_data['wallet']:,.0f}</div>
-        <div class="stat-label">Wallet Balance</div>
+        <div class="stat-value">📋 {sr_data['new_orders']}</div>
+        <div class="stat-label">New Orders</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
@@ -1041,100 +1075,193 @@ if sr_data['new_orders'] > 50:
     """, unsafe_allow_html=True)
 
 
-# === KANBAN BOARD ===
+# === KANBAN BOARD (Functional) ===
+
+# Task management functions
+def load_local_tasks():
+    """Load tasks from local file first, then GitHub as fallback."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    tasks_file = os.path.join(script_dir, "local_tasks.json")
+    
+    # 1. Try local file first
+    if os.path.exists(tasks_file):
+        try:
+            with open(tasks_file, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    
+    # 2. Fallback to GitHub
+    try:
+        r = requests.get(f"{GITHUB_RAW_BASE}/tasks/tasks.json", timeout=5)
+        if r.ok:
+            return r.json().get("tasks", [])
+    except:
+        pass
+    
+    return []
+
+def save_local_tasks(tasks):
+    """Save tasks to local file and GitHub public folder."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Save to local file
+    local_file = os.path.join(script_dir, "local_tasks.json")
+    with open(local_file, "w") as f:
+        json.dump(tasks, f, indent=2)
+    
+    # Also save to public/tasks/tasks.json (for GitHub sync)
+    public_file = os.path.join(script_dir, "public", "tasks", "tasks.json")
+    os.makedirs(os.path.dirname(public_file), exist_ok=True)
+    with open(public_file, "w") as f:
+        json.dump({"tasks": tasks}, f, indent=2)
+
+# Load tasks
+if 'kanban_tasks' not in st.session_state:
+    st.session_state.kanban_tasks = load_local_tasks()
+    # Add default tasks if empty
+    if not st.session_state.kanban_tasks:
+        st.session_state.kanban_tasks = [
+            {"id": 1, "title": "Check inventory levels", "status": "todo", "priority": "medium", "category": "shiprocket", "desc": ""},
+            {"id": 2, "title": "Update courier priorities", "status": "todo", "priority": "low", "category": "other", "desc": ""},
+            {"id": 3, "title": "Ship morning batch", "status": "done", "priority": "high", "category": "shiprocket", "desc": ""},
+        ]
+
+# Priority colors
+PRIORITY_COLORS = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+PRIORITY_DOTS = {"high": "red", "medium": "orange", "low": "green"}
+STATUS_NAMES = {"todo": "TO DO", "in_progress": "IN PROGRESS", "done": "DONE", "archive": "ARCHIVE"}
+
+# Filter tasks by status
+kanban_todo = [t for t in st.session_state.kanban_tasks if t.get("status") == "todo"]
+kanban_doing = [t for t in st.session_state.kanban_tasks if t.get("status") == "in_progress"]
+kanban_done = [t for t in st.session_state.kanban_tasks if t.get("status") == "done"]
+kanban_archive = [t for t in st.session_state.kanban_tasks if t.get("status") == "archive"]
+
+# Add Task Button
+add_col, spacer = st.columns([1, 4])
+with add_col:
+    if st.button("➕ Add Task", use_container_width=True, type="primary"):
+        st.session_state.show_add_task = True
+
+# Add Task Form
+if st.session_state.get("show_add_task"):
+    with st.container():
+        st.markdown("### ➕ New Task")
+        new_title = st.text_input("Title", key="new_task_title", placeholder="Task title...")
+        col_p, col_c = st.columns(2)
+        with col_p:
+            new_priority = st.selectbox("Priority", ["high", "medium", "low"], index=1, format_func=lambda x: f"{PRIORITY_COLORS[x]} {x.title()}", key="new_task_priority")
+        with col_c:
+            new_category = st.selectbox("Category", ["shiprocket", "other"], key="new_task_category")
+        new_desc = st.text_area("Description (optional)", key="new_task_desc", placeholder="Task details...")
+        
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("💾 Save Task", use_container_width=True, type="primary"):
+                if new_title:
+                    new_id = max([t.get("id", 0) for t in st.session_state.kanban_tasks] + [0]) + 1
+                    st.session_state.kanban_tasks.append({
+                        "id": new_id, "title": new_title, "status": "todo",
+                        "priority": new_priority, "category": new_category, "desc": new_desc
+                    })
+                    save_local_tasks(st.session_state.kanban_tasks)
+                    st.session_state.show_add_task = False
+                    st.toast("✅ Task added!", icon="📋")
+                    st.rerun()
+        with btn_col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.show_add_task = False
+                st.rerun()
+        st.markdown("---")
+
+# Kanban Columns
 c1, c2, c3, c4 = st.columns(4, gap="small")
 
+def render_task_card(task, col_key):
+    """Render a task card with actions."""
+    priority = task.get("priority", "medium")
+    dot = PRIORITY_COLORS.get(priority, "🟡")
+    cat_icon = "📦" if task.get("category") == "shiprocket" else "📁"
+    
+    with st.expander(f"{dot} {task.get('title', 'Task')}", expanded=False):
+        st.caption(f"{cat_icon} {task.get('category', 'other').title()}")
+        if task.get("desc"):
+            st.write(task.get("desc"))
+        
+        # Action buttons
+        act_col1, act_col2, act_col3 = st.columns(3)
+        with act_col1:
+            new_status = st.selectbox(
+                "Move to", 
+                ["todo", "in_progress", "done", "archive"],
+                index=["todo", "in_progress", "done", "archive"].index(task.get("status", "todo")),
+                format_func=lambda x: STATUS_NAMES.get(x, x),
+                key=f"move_{task['id']}_{col_key}"
+            )
+            if new_status != task.get("status"):
+                task["status"] = new_status
+                save_local_tasks(st.session_state.kanban_tasks)
+                st.toast(f"✅ Moved to {STATUS_NAMES[new_status]}", icon="➡️")
+                st.rerun()
+        with act_col2:
+            new_pri = st.selectbox(
+                "Priority",
+                ["high", "medium", "low"],
+                index=["high", "medium", "low"].index(task.get("priority", "medium")),
+                format_func=lambda x: f"{PRIORITY_COLORS[x]} {x.title()}",
+                key=f"pri_{task['id']}_{col_key}"
+            )
+            if new_pri != task.get("priority"):
+                task["priority"] = new_pri
+                save_local_tasks(st.session_state.kanban_tasks)
+                st.toast("✅ Priority updated", icon="🎯")
+                st.rerun()
+        with act_col3:
+            if st.button("🗑️", key=f"del_{task['id']}_{col_key}", help="Delete task"):
+                st.session_state.kanban_tasks = [t for t in st.session_state.kanban_tasks if t.get("id") != task.get("id")]
+                save_local_tasks(st.session_state.kanban_tasks)
+                st.toast("🗑️ Task deleted", icon="✅")
+                st.rerun()
+
 with c1:
-    # Build TO DO column HTML
-    todo_tasks_html = ""
-    for t in todo:
-        priority = t.get("priority", "medium")
-        dot_class = "orange" if priority == "high" else "blue"
-        todo_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot {dot_class}"></span><span class="t-text">{t.get("title","")}</span></div></div>'
-    
-    if not todo:
-        todo_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No pending tasks</div>'
-    
-    st.markdown(f"""
-    <div class="kanban-col">
-        <div class="kanban-header">
-            <div class="kanban-title"><span class="k-dot orange"></span> TO DO ({len(todo)})</div>
-            <span class="k-add">+</span>
-        </div>
-        <div class="kanban-tasks">
-            {todo_tasks_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"**🟠 TO DO ({len(kanban_todo)})**")
+    if kanban_todo:
+        for t in kanban_todo:
+            render_task_card(t, "todo")
+    else:
+        st.caption("No pending tasks")
 
 with c2:
-    # Build IN PROGRESS column HTML
-    doing_tasks_html = ""
-    for t in doing:
-        doing_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot blue"></span><span class="t-text">{t.get("title","")}</span></div></div>'
-    
-    if not doing:
-        doing_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No tasks in progress</div>'
-    
-    st.markdown(f"""
-    <div class="kanban-col">
-        <div class="kanban-header">
-            <div class="kanban-title"><span class="k-dot blue"></span> IN PROGRESS ({len(doing)})</div>
-            <span class="k-add">+</span>
-        </div>
-        <div class="kanban-tasks">
-            {doing_tasks_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"**🔵 IN PROGRESS ({len(kanban_doing)})**")
+    if kanban_doing:
+        for t in kanban_doing:
+            render_task_card(t, "doing")
+    else:
+        st.caption("No tasks in progress")
 
 with c3:
-    # Build DONE column HTML
-    done_tasks_html = ""
-    for t in done:
-        done_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">{t.get("title","")}</span></div></div>'
-    for b in today_batches[:4]:
-        ts = b.get("timestamp", "")
-        time_str = ts[11:16] if len(ts) > 16 else ""
-        done_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot green"></span><span class="t-text">✅ Batch {time_str}: {b.get("shipped",0)} shipped</span></div></div>'
-    
-    if not done and not today_batches:
-        done_tasks_html = '<div style="padding: 20px; text-align: center; color: #6e7681;">No completed tasks</div>'
-    
-    st.markdown(f"""
-    <div class="kanban-col">
-        <div class="kanban-header">
-            <div class="kanban-title"><span class="k-dot green"></span> DONE ({len(done) + len(today_batches)})</div>
-            <span class="k-add">+</span>
-        </div>
-        <div class="kanban-tasks">
-            {done_tasks_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"**🟢 DONE ({len(kanban_done)})**")
+    if kanban_done:
+        for t in kanban_done:
+            render_task_card(t, "done")
+    else:
+        st.caption("No completed tasks")
 
 with c4:
-    # Build ARCHIVE column HTML
-    archive_tasks_html = ""
-    for item in archive_items[:5]:
-        archive_tasks_html += f'<div class="task"><div class="task-content"><span class="t-dot gray"></span><span class="t-text muted">{item[:45]}...</span></div></div>'
-    
-    st.markdown(f"""
-    <div class="kanban-col">
-        <div class="kanban-header">
-            <div class="kanban-title"><span class="k-dot gray"></span> ARCHIVE</div>
-        </div>
-        <div class="kanban-tasks">
-            {archive_tasks_html}
-        </div>
-        <button class="show-btn">Show all {len(batches)} archived ▼</button>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"**⚫ ARCHIVE ({len(kanban_archive)})**")
+    if kanban_archive:
+        for t in kanban_archive[:5]:
+            render_task_card(t, "archive")
+        if len(kanban_archive) > 5:
+            st.caption(f"+ {len(kanban_archive) - 5} more archived")
+    else:
+        st.caption("No archived tasks")
 
 
-# === MIDDLE SECTION: Activity + Courier Health + Summary ===
+# === MIDDLE SECTION: Activity + Summary ===
 st.markdown("<br>", unsafe_allow_html=True)
-col_activity, col_courier, col_summary = st.columns([2, 1.5, 1.5], gap="medium")
+col_activity, col_summary = st.columns([2, 1.5], gap="medium")
 
 with col_activity:
     st.markdown('<div class="section-title">⚡ Recent Activity</div>', unsafe_allow_html=True)
@@ -1161,27 +1288,6 @@ with col_activity:
         """, unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
-
-with col_courier:
-    st.markdown('<div class="section-title">🚚 Courier Health</div>', unsafe_allow_html=True)
-    
-    for c in courier_stats[:3]:
-        rate = c['rate']
-        badge_class = "good" if rate >= 90 else ("warning" if rate >= 75 else "bad")
-        bar_class = "green" if rate >= 90 else ("yellow" if rate >= 75 else "red")
-        star = "⭐" if rate >= 95 else ("⚠️" if rate < 75 else "")
-        
-        st.markdown(f"""
-        <div class="courier-card">
-            <div class="courier-header">
-                <span class="courier-name">{c['name']} {star}</span>
-                <span class="courier-badge {badge_class}">{rate}%</span>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill {bar_class}" style="width: {rate}%"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
 with col_summary:
     st.markdown(f"""
@@ -1214,34 +1320,73 @@ st.markdown("<br>", unsafe_allow_html=True)
 b1, b2 = st.columns(2, gap="medium")
 
 with b1:
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">📅 Scheduled Deliverables</div>', unsafe_allow_html=True)
+    # Build schedules HTML in one block
+    schedules_html = '<div class="section-box"><div class="section-title">📅 Scheduled Deliverables</div>'
     for s in schedules[:3]:
         days = ", ".join(s.get("days", [])[:3])
-        st.markdown(f'''
+        schedules_html += f'''
         <div class="schedule">
             <div>
                 <div class="sched-name">{s.get("name","")}</div>
                 <div class="sched-meta">{s.get("time","")} • {days}</div>
             </div>
             <span class="sched-badge">✓ Active</span>
-        </div>
-        ''', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        </div>'''
+    schedules_html += '</div>'
+    st.markdown(schedules_html, unsafe_allow_html=True)
 
 with b2:
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">📝 Notes</div>', unsafe_allow_html=True)
-    for n in notes[:2]:
+    # Build notes HTML in one block
+    notes_html = '<div class="section-box"><div class="section-title">📝 Notes</div>'
+    for n in notes[:5]:  # Show up to 5 notes
         cls = "ai" if n.get("type") == "ai" else ""
         icon = "🤖" if n.get("type") == "ai" else "👤"
-        st.markdown(f'''
+        content = n.get("content", "")[:120]
+        notes_html += f'''
         <div class="note {cls}">
-            <div class="note-text">{icon} {n.get("content","")[:120]}...</div>
+            <div class="note-text">{icon} {content}...</div>
             <div class="note-time">{n.get("timestamp","")}</div>
-        </div>
-        ''', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        </div>'''
+    notes_html += '</div>'
+    st.markdown(notes_html, unsafe_allow_html=True)
+    
+    # Add Note button
+    if st.button("➕ Add Note", use_container_width=True):
+        st.session_state.show_add_note = True
+    
+    # Add Note form
+    if st.session_state.get("show_add_note"):
+        new_note = st.text_area("New Note", placeholder="Type your note here...", key="new_note_input")
+        col_save, col_cancel = st.columns(2)
+        with col_save:
+            if st.button("💾 Save", use_container_width=True, type="primary"):
+                if new_note:
+                    # Save note to local file
+                    try:
+                        import os
+                        notes_file = os.path.join(os.path.dirname(__file__), "local_notes.json")
+                        existing = []
+                        if os.path.exists(notes_file):
+                            with open(notes_file, "r") as f:
+                                existing = json.load(f)
+                        new_entry = {
+                            "content": new_note,
+                            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "type": "user"
+                        }
+                        existing.insert(0, new_entry)  # Add to top
+                        with open(notes_file, "w") as f:
+                            json.dump(existing, f, indent=2)
+                        st.toast("✅ Note saved!", icon="📝")
+                        st.cache_data.clear()  # Clear cache to reload notes
+                    except Exception as e:
+                        st.error(f"Failed to save: {e}")
+                    st.session_state.show_add_note = False
+                    st.rerun()
+        with col_cancel:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.show_add_note = False
+                st.rerun()
 
 
 # === SHIP NOW HANDLER ===

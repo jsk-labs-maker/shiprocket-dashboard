@@ -1,31 +1,7 @@
 {
   "tasks": [
-    {
-      "id": "task-001",
-      "title": "Ship morning batch",
-      "description": "Process all NEW orders from overnight",
-      "priority": "high",
-      "status": "done",
-      "created_at": "2026-02-16T09:00:00",
-      "completed_at": "2026-02-16T09:30:00"
-    },
-    {
-      "id": "task-002",
-      "title": "Check inventory levels",
-      "description": "Review SKU stock for low items",
-      "priority": "medium",
-      "status": "open",
-      "created_at": "2026-02-16T10:00:00"
-    },
-    {
-      "id": "task-003",
-      "title": "Update courier priorities",
-      "description": "Adjust courier selection based on performance",
-      "priority": "low",
-      "status": "open",
-      "created_at": "2026-02-16T11:00:00"
-    }
-  ],
-  "columns": ["open", "in_progress", "done"],
-  "updated_at": "2026-02-16T23:20:00"
+    {"id": 1, "title": "Check inventory levels", "status": "todo", "priority": "medium", "category": "shiprocket", "desc": ""},
+    {"id": 2, "title": "Update courier priorities", "status": "todo", "priority": "low", "category": "other", "desc": ""},
+    {"id": 3, "title": "Ship morning batch", "status": "done", "priority": "high", "category": "shiprocket", "desc": ""}
+  ]
 }
